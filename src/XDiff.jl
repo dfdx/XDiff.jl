@@ -1,5 +1,13 @@
+
+__precompile__()
+
 module XDiff
 
-# package code goes here
+export _rdiff,
+       rdiff,
+       fdiff,
+       @diff_rule
+
+include("core.jl")
 
 end # module
