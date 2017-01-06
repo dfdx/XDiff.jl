@@ -20,6 +20,7 @@ types = [typeof(a), typeof(b)]
 da, db = fdiff(f, types)
 xresults = da(a, b), db(a, b)
 
+# manual
 ex = :(sum(a' * b + a * b'))
-g = ExGraph(ex; a=rand(3,3), b=rand(3,3))
-
+inputs = [:a=>rand(3,3), :b=>rand(3,3)]
+dexs = rdiff(ex, inputs...)
