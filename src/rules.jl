@@ -114,7 +114,7 @@
 @diff_rule exp(x::Number) 1 exp(x)
 @diff_rule exp(x::AbstractArray) 1 exp(x)
 
-@diff_rule log(x::Number) 1 (1/x)
+@diff_rule log(x::Number) 1 (1 ./ x)
 
 # abs
 

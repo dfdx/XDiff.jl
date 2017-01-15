@@ -220,6 +220,17 @@ function format_output(meth, outfmt, ctx, dexs, inputs)
         res = Dict()
         for (var, dex) in dexs
             res[var] = from_einstein(dex; ctx=ctx, inputs...)
+            # try
+                
+            # catch
+            #     res[var] = to_einsum(dex)  # fallback
+            # end
+        end
+        return res
+    elseif outfmt == :einsum
+        res = Dict()
+        for (var, dex) in dexs
+            res[var] = to_einsum(dex)
         end
         return res
     else
@@ -278,7 +289,7 @@ rdiff(f::Function; ctx=Dict(), xs...)
 Differentiate function `f` w.r.t. its arguments. See `rdiff(ex::Expr, xs...)`
 for more details.
 """
-function rdiff(f::Function, types::Vector{DataType}; ctx=Dict())
+function rdiff{N}(f::Function, types::NTuple{N,DataType}; ctx=Dict())
     ctx = to_context(ctx)
     args, ex = funexpr(f, types)
     vals = map(example_val, types)
@@ -296,20 +307,17 @@ function, one per argument.
 
 See also `rdiff()`.
 """
-function fdiff(f::Function, types::Vector{DataType}; ctx=Dict())
+function fdiff{N}(f::Function, types::NTuple{N,DataType}; ctx=Dict())
     args, _ = funexpr(f, types)
     dexs = rdiff(f, types; ctx=ctx)
     mod = ctx[:mod]
     typed_args = [Expr(:(::), x, t) for (x, t) in zip(args, types)]
     header = Expr(:tuple, typed_args...)
     fns = Array(Any, 0)
-    for (var, dex) in dexs        
-        fn_ex = Expr(:->, header, dex)
+    for arg in args        
+        fn_ex = Expr(:->, header, dexs[arg])
         fn = eval(mod, fn_ex)
         push!(fns, fn)
     end
     return fns
 end
-
-
-

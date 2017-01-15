@@ -3,7 +3,6 @@ using Compat
 using Iterators
 using Espresso
 import Espresso: expr
-# import Base: *, +
 
 include("utils.jl")
 include("ops.jl")

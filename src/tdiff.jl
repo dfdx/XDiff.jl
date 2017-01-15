@@ -1,18 +1,21 @@
 
-function permute_indices(idxs::Vector{Symbol}, orig::Vector{Symbol}, perm::Vector{Symbol})
-    d = Dict(zip(orig, idxs))
-    return [d[x] for x in perm]
+function permute_indices{Idx<:ExIndex}(lhs_idxs::Vector{Idx},
+                                       rhs_idxs::Vector{Idx})
+    diff_idxs = union(setdiff(Set(lhs_idxs), Set(rhs_idxs)),
+                      setdiff(Set(rhs_idxs), Set(lhs_idxs)))
+    f_rhs_idxs = [idx for idx in rhs_idxs if !in(idx, diff_idxs)]
+    f_lhs_idxs = [idx for idx in lhs_idxs if !in(idx, diff_idxs)]
+    st = Dict(zip(f_rhs_idxs, f_lhs_idxs))
+    return [get(st, idx, idx) for idx in rhs_idxs]
 end
 
-
 function rev_step!(g::ExGraph, nd::ExNode{:(=)}, adj::Dict{Symbol, TensorDeriv})
-    # TODO: detect index permutation or inner contraction and handle it properly
     y = nd.var
     x = dependencies(nd)[1]
-    dzdx = copy(adj[y])
-    dzdx.wrt.args[1] = dname(x)
-    wrtidxs = convert(Vector{Symbol}, dzdx.wrt.args[2:end])
-    dzdx.wrt.args[2:end] = permute_indices(wrtidxs, nd.idxs[2], nd.idxs[1])
+    dzdx = deepcopy(adj[y])
+    wrtidxs = permute_indices(nd.idxs[1], nd.idxs[2])
+    # Q: should we subs indices in dzdx.ex? (assuming not)
+    dzdx.wrt.args = [dname(x), wrtidxs...]
     adj[x] = dzdx
 end
 
@@ -33,15 +36,15 @@ function rev_step!(g::ExGraph, nd::ExNode{:call}, adj::Dict{Symbol, TensorDeriv}
     iex = to_iexpr(nd)
     dzdy = adj[y]
     sizes = g.ctx[:sizes]
-    for (i, x) in enumerate(dependencies(nd))
+    for x in dependencies(nd)
         dydx = tderivative(iex, x)
-        dzdx = dzdy ⊗ dydx
+        dzdx = dzdy ⊗ dydx        
         if haskey(adj, x)
             adj[x] = adj[x] ⊕ dzdx
         else
             adj[x] = dzdx
         end
-        if x != :I            
+        if x != :I
             dzdx_name = single_var(dzdx).args[1]
             sizes[dzdx_name] = deriv_size(sizes[g.ctx[:z_var]], sizes[x])
         end
@@ -53,8 +56,8 @@ function deriv_size(z_size::Expr, x_size::Expr)
     if z_size == :(())
         return x_size
     else
-        # TODO: find nice form of (z_size..., x_size...)
-        error("Oh, hell, how did we get here?")
+        # TODO: to fix it, just find nice form of (z_size..., x_size...)
+        error("Differentiation of non-scalar output variable is not supported yet")
     end
 end
 

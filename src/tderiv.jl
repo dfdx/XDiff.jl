@@ -39,6 +39,8 @@ expr(td::TensorDeriv) = td.ex
 var_indices(td::TensorDeriv) = convert(Vector{Symbol}, td.dvar.args[2:end])
 wrt_indices(td::TensorDeriv) = convert(Vector{Symbol}, td.wrt.args[2:end])
 deriv_indices(td::TensorDeriv) = vcat(var_indices(td), wrt_indices(td))
+all_indices(td::TensorDeriv) = union(deriv_indices(td),
+                                     flatten(Symbol, get_indices(expr(td))))
 
 function to_expr(td::TensorDeriv)
     # dvarname, dvaridxs = string(td.dvar.args[1]), td.dvar.args[2:end]
@@ -84,7 +86,7 @@ end
 
 
 """
-Given a set of existing indicies and possibly duplicates, find for each duplicate
+Given a set of existing indicies and possible duplicates, find for each duplicate
 a replacement - index from IDX_NAMES that is not used yet.
 """
 function index_replacements(existing::Set{Symbol}, maybedups::Vector{Symbol})
@@ -109,83 +111,60 @@ function reindex_with_guards(td::TensorDeriv)
 end
 
 
-# make recursive?
-## function _simplify_pseudoone(ex::Expr, idxs::Vector{Symbol})
-##     mtn = matchex(:(I[$(idxs...)] * _X), ex)
-##     if !isnull(mtn)
-##         mt = get(mtn)
-##         if sum_indices(mt[:_X]) == [mt[idx] for idx in idxs]
-##             ex = mt[:_X]
-##         end
-##     end
-##     mtn = matchex(:(_X * I[$(idxs...)]), ex)
-##     if !isnull(mtn)
-##         mt = get(mtn)
-##         if sum_indices(mt[:_X]) == [mt[idx] for idx in idxs]
-##             ex = mt[:_X]
-##         end
-##     end
-##     return ex
-## end
-
-## function simplify_pseudoone(ex::Expr)
-##     ex = _simplify_pseudoone(ex, [:_i])
-##     ex = _simplify_pseudoone(ex, [:_i, :_j])
-##     ex = _simplify_pseudoone(ex, [:_i, :_j, :_k])
-##     ex = _simplify_pseudoone(ex, [:_i, :_j, :_k, :m])
-##     return ex
-## end
-
-function remove_extra_sum(ex::Expr)
-    new_ex = without(ex, :(I[_i]))
-    if sum_indices(new_ex) == sum_indices(ex)
-        ex = new_ex
-    end
-    new_ex = without(ex, :(I[_i, _j]))
-    if sum_indices(new_ex) == sum_indices(ex)
-        ex = new_ex
-    end
-    new_ex = without(ex, :(I[_i, _j, _k]))
-    if sum_indices(new_ex) == sum_indices(ex)
-        ex = new_ex
+function with_pseudo_one{Idx<:ExIndex}(ex::Expr, lhs_idxs::Vector{Idx})
+    rhs_idxs = forall_indices(ex)
+    sum_idxs = setdiff(rhs_idxs, lhs_idxs)
+    if isempty(sum_idxs)
+        return ex
+    else
+        pseudo_one = Expr(:ref, :I, sum_idxs...)
+        return Expr(:call, :*, ex, pseudo_one)
     end
 end
 
-remove_extra_sum(x) = x
+with_pseudo_one(x, lhs_idxs) = x
 
+"""
+Reindex second tensor derivative so that:
 
-function remove_extra_sum_with_lhs(ex::Expr, lhs_idxs)
-    lhs_idxs = Set(lhs_idxs)
-    idxd_vars = indexed_vars(ex)
-    remove_list = Expr[]
-    for var in idxd_vars
-        if var.args[1] == :I && all(idx -> in(idx, lhs_idxs), var.args[2:end])
-            push!(remove_list, var)
-        end
-    end
-    ret = ex
-    for var in remove_list
-        ret = without(ret, var)
-    end
-    return ret
+    * td2's var indices match td1's w.r.t. indices
+    * no other indices in td2 equal any indices in td1
+"""
+function reindex_to_match(td1::TensorDeriv, td2::TensorDeriv)
+    common_idxs_st = Dict(zip(var_indices(td2), wrt_indices(td1)))
+    other_idxs_st = index_replacements(Set(all_indices(td1)), all_indices(td2))
+    st = merge(other_idxs_st, common_idxs_st)
+    td2_dvar = subs(td2.dvar, st)
+    td2_wrt = subs(td2.wrt, st)
+    td2_ex = subs(td2.ex, st)
+    td2_guards = Expr[subs(g, st) for g in td2.guards]
+    td2 = TensorDeriv(td2_dvar, td2_wrt, td2_ex, td2_guards)
+    return td1, td2
 end
 
 
+"""
+Elementwise multuplication of tensor derivatives.
+Example:
+
+    dzdx = dzdy ⊗ dydx
+
+which may expand to:     
+
+    dz[]/dy[i] = v[i]
+    dy[i]/dx[j] = w[i,j]
+    dz[]/dx[j] = v[i] .* w[i,j]
+"""
 function ⊗(td1::TensorDeriv, td2::TensorDeriv)
     # can only multiply related derivatives, e.g. dz/dy * dy/dx
     @assert td1.wrt.args[1] == td2.dvar.args[1]
-    common_idxs_st = Dict(zip(var_indices(td2), wrt_indices(td1)))
-    other_idxs_st = index_replacements(Set(deriv_indices(td1)),
-                                       wrt_indices(td2))
-    st = merge(common_idxs_st, other_idxs_st)
-    wrt2_reindexed = subs(td2.wrt, st)
-    ex2_reindexed = subs(expr(td2), st)
-    guards2_reindexed = Expr[subs(g, st) for g in td2.guards]
-    new_ex = simplify(expr(td1) ⊗ ex2_reindexed)
-    # TODO: don't replace if new_ex_ == :(I[i]) or :(-(I[i]))
-    # new_ex = remove_extra_sum_with_lhs(new_ex_, collect(values(st)))
-    new_guards = vcat(td1.guards, guards2_reindexed)
-    new_td = TensorDeriv(td1.dvar, wrt2_reindexed, new_ex, new_guards)
+    td1, td2 = reindex_to_match(td1, td2)
+    # add pseudo one to enable accurate parsing later
+    new_ex1 = with_pseudo_one(expr(td1), deriv_indices(td1))
+    new_ex2 = with_pseudo_one(expr(td2), deriv_indices(td2))
+    new_ex = simplify(new_ex1 ⊗ new_ex2)
+    new_guards = vcat(td1.guards, td2.guards)
+    new_td = TensorDeriv(td1.dvar, td2.wrt, new_ex, new_guards)
     return reindex_with_guards(new_td)
 end
 
@@ -195,24 +174,6 @@ function tderiv_var(td::TensorDeriv)
     return maybe_indexed(name, idxs)
 end
 
-
-# function *(td1::TensorDeriv, td2::TensorDeriv)
-#     # can only multiply related derivatives, e.g. dz/dy * dy/dx
-#     @assert td1.wrt.args[1] == td2.dvar.args[1]
-#     common_idxs_st = Dict(zip(var_indices(td2), wrt_indices(td1)))
-#     other_idxs_st = index_replacements(Set(deriv_indices(td1)),
-#                                        wrt_indices(td2))
-#     st = merge(common_idxs_st, other_idxs_st)
-#     wrt2_reindexed = subs(td2.wrt, st)
-#     ex2_reindexed = subs(expr(td2), st)
-#     guards2_reindexed = Expr[subs(g, st) for g in td2.guards]
-#     new_ex_ = simplify(tderiv_var(td1) * ex2_reindexed)
-#     # TODO: don't replace if new_ex_ == :(I[i]) or :(-(I[i]))
-#     new_ex = remove_extra_sum_with_lhs(new_ex_, collect(values(st)))
-#     new_guards = vcat(td1.guards, guards2_reindexed)
-#     new_td = TensorDeriv(td1.dvar, wrt2_reindexed, new_ex, new_guards)
-#     return reindex_with_guards(new_td)
-# end
 
 """Find indices on RHS of TensorDeriv which aren't present on LHS"""
 function free_indices(td::TensorDeriv)
@@ -225,7 +186,7 @@ function ⊕(td1::TensorDeriv, td2::TensorDeriv)
     @assert td1.dvar.args[1] == td2.dvar.args[1]
     @assert td1.wrt.args[1] == td2.wrt.args[1]
     dvar_idxs_st = Dict(zip(var_indices(td2), var_indices(td1)))
-    wrt_idxs_st = Dict(zip(wrt_indices(td2), wrt_indices(td1)))    
+    wrt_idxs_st = Dict(zip(wrt_indices(td2), wrt_indices(td1)))
     st = merge(dvar_idxs_st, wrt_idxs_st)
     free_idxs = free_indices(td2)
     # TODO: should we also inclue all indicies of expr(td1)?
@@ -235,7 +196,7 @@ function ⊕(td1::TensorDeriv, td2::TensorDeriv)
         if in(idx, values(st))
             st[idx], next_idx_pos = next_index(all_existing_idxs, next_idx_pos)
         end
-    end    
+    end
     wrt2_reindexed = subs(td2.wrt, st)
     ex2_reindexed = subs(expr(td2), st)
     guards2_reindexed = Expr[subs(g, st) for g in td2.guards]
@@ -322,7 +283,7 @@ function to_tensor_rule(ew_rule::DiffRule, orig_idxs::Vector{Vector{Symbol}}, id
     tex = rewrite(tpat, ew_pat, ew_ex; phs=DIFF_PHS)
     # constructing tensor derivative
     if length(orig_idxs[idx + 1]) > 0
-        # old and new w.r.t. indices must be equal        
+        # old and new w.r.t. indices must be equal
         tguards = Expr[:($i1 == $i2) for (i1, i2) in zip(orig_idxs[idx+1], wrt_idxs)]
     else
         tguards = Expr[]  # TODO: this should be covered by previous definition too
@@ -371,7 +332,8 @@ function tfind_rule(fullex::Expr, idx::Int)
     op = fullex.args[2].args[1]  # TODO: opname(current_module(), op)?
     haskey(TENSOR_DIFF_RULES, (op, idx)) || return Nullable{TensorDiffRule}()
     rules = TENSOR_DIFF_RULES[(op, idx)]
-    matching = findfirst(pat -> !isnull(matchex(pat, fullex; phs=TDIFF_PHS)),
+    matches = pat -> !isnull(matchex(pat, fullex; phs=TDIFF_PHS, allow_ex=false))
+    matching = findfirst(matches,
                          [r.pat for r in rules])
     matching != 0 || return Nullable{TensorDiffRule}()
     return Nullable{TensorDiffRule}(rules[matching])

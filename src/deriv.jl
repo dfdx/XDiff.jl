@@ -116,7 +116,7 @@ of `types` at index `idx`, return this new rule.
 function register_rule(fname::OpName, types::Vector{DataType}, idx::Int)    
     # TODO: check module
     f = eval(fname)
-    args, ex = funexpr(f, types)
+    args, ex = funexpr(f, (types...))
     ex = sanitize(ex)
     # TODO: replace `ones()` with `example_val()` that can handle arrays
     xs = [(arg, ones(T)[1]) for (arg, T) in zip(args, types)]

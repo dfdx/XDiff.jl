@@ -29,10 +29,10 @@
 # @tdiff_rule (Z[i,j] = X[j,i]) (dZ[i,j]/dX[m,n] = 1 * (i == n) * (j == m))
 
 # some element-wise functions
-@tdiff_rule (Z[i] = X[i] + Y[i]) (dZ[i]/dX[j] = 1 * (i == j))
-@tdiff_rule (Z[i] = X[i] + Y[i]) (dZ[i]/dY[j] = 1 * (i == j))
-@tdiff_rule (Z[i,j] = X[i,j] + Y[i,j]) (dZ[i,j]/dX[m,n] = 1 * (i == m) * (j == n))
-@tdiff_rule (Z[i,j] = X[i,j] + Y[i,j]) (dZ[i,j]/dY[m,n] = 1 * (i == m) * (j == n))
+# @tdiff_rule (Z[i] = X[i] + Y[i]) (dZ[i]/dX[j] = 1 * (i == j))
+# @tdiff_rule (Z[i] = X[i] + Y[i]) (dZ[i]/dY[j] = 1 * (i == j))
+# @tdiff_rule (Z[i,j] = X[i,j] + Y[i,j]) (dZ[i,j]/dX[m,n] = 1 * (i == m) * (j == n))
+# @tdiff_rule (Z[i,j] = X[i,j] + Y[i,j]) (dZ[i,j]/dY[m,n] = 1 * (i == m) * (j == n))
 
 
 # TODO: rewrite elementwise rules to handle expressions like
