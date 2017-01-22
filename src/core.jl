@@ -2,7 +2,8 @@
 using Compat
 using Iterators
 using Espresso
-import Espresso: expr
+import Espresso: expr, canonical, canonical_calls, to_context, flatten, @get
+import Espresso: reduce_equalities
 
 include("utils.jl")
 include("ops.jl")

@@ -31,8 +31,8 @@ end
 
 const DIFF_PHS = Set([:x, :y, :z, :a, :b, :c, :m, :n])
 
-@runonce const DIFF_RULES =
-        Dict{Tuple{OpName, Vector{Type}, Int}, DiffRule}()
+const DIFF_RULES =
+    Dict{Tuple{OpName, Vector{Type}, Int}, DiffRule}()
 
 
 opname(mod, op) = canonical(mod, op)
@@ -57,7 +57,7 @@ automatically handled by chain rule in the differentiation engine.
 
 """
 macro diff_rule(ex::Expr, idx::Int, dex::Any)
-    if ex.head == :call        
+    if ex.head == :call
         op = opname(current_module(), ex.args[1])
         types = [eval(exa.args[2]) for exa in ex.args[2:end]]
         new_args = Symbol[exa.args[1] for exa in ex.args[2:end]]
@@ -113,7 +113,7 @@ end
 Register new differentiation rule for function `fname` with arguments
 of `types` at index `idx`, return this new rule.
 """
-function register_rule(fname::OpName, types::Vector{DataType}, idx::Int)    
+function register_rule(fname::OpName, types::Vector{DataType}, idx::Int)
     # TODO: check module
     f = eval(fname)
     args, ex = funexpr(f, (types...))

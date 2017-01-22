@@ -56,8 +56,9 @@ function deriv_size(z_size::Expr, x_size::Expr)
     if z_size == :(())
         return x_size
     else
-        # TODO: to fix it, just find nice form of (z_size..., x_size...)
-        error("Differentiation of non-scalar output variable is not supported yet")
+        # TODO: there should be a better representation of (z_size..., x_size...)
+        return :($(z_size)..., $(x_size)...)
+        
     end
 end
 
