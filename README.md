@@ -6,7 +6,7 @@ Unlike automatic differentiation packages, XDiff.jl can output not only ready-to
 derivative functions, but also their symbolic expressions suitable for
 further optimization and code generation. Here's an example:
 
-```
+```julia
 function ann(w1, w2, w3, x1)
     _x2 = w1 * x1
     x2 = log(1. + exp(_x2))   # soft RELU unit
@@ -34,7 +34,7 @@ dw1(randn(100,100), randn(100,100), randn(1,100), randn(100))
 Another unique feature of XDiff.jl is that it can generate expressions not only for functions R^n -> R,
 but also functions R^n -> R^m using Einstein indexing notation:
 
-```
+```julia
 # by default, rdiff tries to generate vectorized output
 # we can make it return expressions in Einstein notation using :outfmt option
 ctx = [:outfmt => :ein]
