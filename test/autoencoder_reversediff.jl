@@ -2,7 +2,7 @@
 using XDiff
 using ReverseDiff: compile_gradient
 
-logistic(x) = 1 ./ (1 + exp(-x))
+logistic(x) = 1 ./ (1 + exp.(-x))
 
 # for reference, not used in this example
 function autoencoder(We1, We2, Wd, b1, b2, x)

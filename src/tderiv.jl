@@ -76,7 +76,7 @@ end
 
 
 function next_indices(existing::Set{Symbol}, pos::Int, count::Int)
-    new_indices = Array(Symbol,0)
+    new_indices = Array{Symbol}(0)
     for i=1:count
         new_idx, pos = next_index(existing, pos)
         push!(new_indices, new_idx)
@@ -379,7 +379,7 @@ function tderivative(fullex::Expr, idx::Int)
         idxs = call_indices(fullex)
         # elementwise or broadcasting function
         op = opname(current_module(), fullex.args[2].args[1])
-        types = [Number for i=1:length(fullex.args[2].args)-1]
+        types = [Float64 for i=1:length(fullex.args[2].args)-1]
         ew_maybe_rule = find_rule(op, types, idx)
         ew_rule = (!isnull(ew_maybe_rule) ? get(ew_maybe_rule) :
                    register_rule(op, types, idx))
