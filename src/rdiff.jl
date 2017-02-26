@@ -177,6 +177,22 @@ function rev_step!(g::ExGraph, nd::ExNode{:call}, adj::Dict{Symbol,Deriv})
     end
 end
 
+function rev_step!(g::ExGraph, nd::ExNode{:bcast}, adj::Dict{Symbol,Deriv})
+    y = nd.var
+    types = [typeof(g.idx[x].val) for x in dependencies(nd)]
+    for (i, x) in enumerate(dependencies(nd))
+        xnd = g[x]
+        dydx = derivative(bcast_to_call(expr(nd)), types, i, mod=g.ctx[:mod])
+        dzdy = adj[y]
+        a = dzdy ⊗ dydx
+        if haskey(adj, x)
+            adj[x] = adj[x] ⊕ a
+        else
+            adj[x] = a
+        end
+    end
+end
+
 
 ## reverse pass
 
@@ -313,7 +329,7 @@ function fdiff{N}(f::Function, types::NTuple{N,DataType}; ctx=Dict())
     mod = ctx[:mod]
     typed_args = [Expr(:(::), x, t) for (x, t) in zip(args, types)]
     header = Expr(:tuple, typed_args...)
-    fns = Array(Any, 0)
+    fns = Array{Any}(0)
     for arg in args        
         fn_ex = Expr(:->, header, dexs[arg])
         fn = eval(mod, fn_ex)

@@ -3,9 +3,9 @@
 
 const IDX_NAMES = Espresso.IDX_NAMES
 
-abstract AbstractDeriv
+@compat abstract type AbstractDeriv end
 
-immutable Deriv
+struct Deriv
     ex::Any
 end
 
@@ -21,9 +21,9 @@ expr(d::Deriv) = d.ex
 to_expr(d::Deriv) = d.ex
 Base.show(io::IO, d::Deriv) = print(io, expr(d))
 
-abstract AbstractDiffRule
+@compat abstract type AbstractDiffRule end
 
-immutable DiffRule <: AbstractDiffRule
+struct DiffRule <: AbstractDiffRule
     pat::Expr        # pattern of expression to differentiate
     deriv::Deriv     # pattern of differentiation expression
 end
@@ -66,6 +66,7 @@ macro diff_rule(ex::Expr, idx::Int, dex::Any)
         canonical_dex = canonical_calls(current_module(), dex)
         DIFF_RULES[(op, types, idx)] = DiffRule(canonical_ex,
                                                 Deriv(canonical_dex))
+        # println("added new one")
     else
         error("Can only define derivative on calls")
     end
