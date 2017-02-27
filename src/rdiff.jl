@@ -237,7 +237,7 @@ function format_output(meth, outfmt, ctx, dexs, inputs)
         for (var, dex) in dexs
             res[var] = from_einstein(dex; ctx=ctx, inputs...)
             # try
-                
+
             # catch
             #     res[var] = to_einsum(dex)  # fallback
             # end
@@ -329,11 +329,29 @@ function fdiff{N}(f::Function, types::NTuple{N,DataType}; ctx=Dict())
     mod = ctx[:mod]
     typed_args = [Expr(:(::), x, t) for (x, t) in zip(args, types)]
     header = Expr(:tuple, typed_args...)
-    fns = Array{Any}(0)
-    for arg in args        
-        fn_ex = Expr(:->, header, dexs[arg])
-        fn = eval(mod, fn_ex)
-        push!(fns, fn)
-    end
-    return fns
+    dex_arr = [dexs[arg] for arg in args]
+    merged_dex = expr_merge(dex_arr...)
+    fn_ex = Expr(:->, header, dexs[arg])
+    fn = eval(mod, fn_ex)
+    return fn
 end
+
+
+
+# OLD IMPLEMENTATION: previosly this function returned an array of function,
+# one per input parameter. We may provide this option under another name in future
+#
+# function fdiff{N}(f::Function, types::NTuple{N,DataType}; ctx=Dict())
+#     args, _ = funexpr(f, types)
+#     dexs = rdiff(f, types; ctx=ctx)
+#     mod = ctx[:mod]
+#     typed_args = [Expr(:(::), x, t) for (x, t) in zip(args, types)]
+#     header = Expr(:tuple, typed_args...)
+#     fns = Array{Any}(0)
+#     for arg in args
+#         fn_ex = Expr(:->, header, dexs[arg])
+#         fn = eval(mod, fn_ex)
+#         push!(fns, fn)
+#     end
+#     return fns
+# end
