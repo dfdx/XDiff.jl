@@ -331,7 +331,7 @@ function fdiff{N}(f::Function, types::NTuple{N,DataType}; ctx=Dict())
     header = Expr(:tuple, typed_args...)
     dex_arr = [dexs[arg] for arg in args]
     merged_dex = expr_merge(dex_arr...)
-    fn_ex = Expr(:->, header, dexs[arg])
+    fn_ex = Expr(:->, header, merged_dex)
     fn = eval(mod, fn_ex)
     return fn
 end
