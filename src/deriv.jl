@@ -90,7 +90,7 @@ and guaranted to be compatible with `apply_rule()`.
 function find_rule(op::OpName, types::Vector{DataType}, idx::Int)
     type_ans = map(type_ansestors, types)
     type_products = product(type_ans...)
-    ks = [(op, [tp...], idx) for tp in type_products]
+    ks = ((op, [tp...], idx) for tp in type_products)
     for k in ks
         if haskey(DIFF_RULES, k)
             return Nullable(DIFF_RULES[k])
