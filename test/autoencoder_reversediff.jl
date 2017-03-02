@@ -1,5 +1,4 @@
 
-using XDiff
 using ReverseDiff: compile_gradient
 
 logistic(x) = 1 ./ (1 + exp.(-x))
@@ -48,7 +47,7 @@ dexs = rdiff(autoencoder_cost, types)
 dexs[:We1]
 
 # XDiff: generate derivative functions and calculate value at the same point
-dWe1, dWe2, dWd, db1, db2, _ = fdiff(autoencoder_cost, types)
+dautoencoder_cost = fdiff(autoencoder_cost, types)
 dWe1_value = dWe1(We1, We2, Wd, b1, b2, x)
 
 # ReverseDiff: generate and apply derivative functions
