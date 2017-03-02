@@ -236,11 +236,6 @@ function format_output(meth, outfmt, ctx, dexs, inputs)
         res = Dict()
         for (var, dex) in dexs
             res[var] = from_einstein(dex; ctx=ctx, inputs...)
-            # try
-
-            # catch
-            #     res[var] = to_einsum(dex)  # fallback
-            # end
         end
         return res
     elseif outfmt == :einsum
@@ -330,7 +325,7 @@ function fdiff{N}(f::Function, types::NTuple{N,DataType}; ctx=Dict())
     typed_args = [Expr(:(::), x, t) for (x, t) in zip(args, types)]
     header = Expr(:tuple, typed_args...)
     dex_arr = [dexs[arg] for arg in args]
-    merged_dex = expr_merge(dex_arr...)
+    merged_dex = mergeex(dex_arr...)
     fn_ex = Expr(:->, header, merged_dex)
     fn = eval(mod, fn_ex)
     return fn
