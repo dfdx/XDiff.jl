@@ -47,8 +47,8 @@ dexs = rdiff(autoencoder_cost, types)
 dexs[:We1]
 
 # XDiff: generate derivative functions and calculate value at the same point
-dautoencoder_cost = fdiff(autoencoder_cost, types)
-dWe1_value = dWe1(We1, We2, Wd, b1, b2, x)
+dcost = fdiff(autoencoder_cost, types)
+dvals = dcost(We1, We2, Wd, b1, b2, x)
 
 # ReverseDiff: generate and apply derivative functions
 const ∇f! = compile_gradient(autoencoder_cost_reversediff, input_tuple)
@@ -56,4 +56,4 @@ results = map(similar, input_tuple)
 ∇f!(results, input_tuple)
 
 # compare results
-@test isapprox(dWe1_value, results[1])
+@test isapprox(dvals[1], results[1])

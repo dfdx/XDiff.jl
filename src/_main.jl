@@ -31,32 +31,11 @@ input_tuple = (We, Wd, x)
 types = map(typeof, input_tuple)
 
 # XDiff: generate a dict of derivative expressions
-dexs = rdiff(autoencoder_cost, types)
+dexs = rdiff(autoencoder_cost, types; ctx=Dict(:outfmt => :vec))
 
 # XDiff: generate derivative functions and calculate value at the same point
 dcost = fdiff(autoencoder_cost, types)
-# @time dWe1, dWe2, dWd, db1, db2, dx = dcost(We1, We2, Wd, b1, b2, x)
+@time dvals = dcost(We, Wd, x)
 
 
 
-
-quote  # /home/slipslop/.julia/v0.6/Espresso/src/from_einstein.jl, line 98:
-    tmp1 = We * x
-    reconstructedInput = Wd * tmp1
-    tmp3 = -(reconstructedInput, x)
-    tmp4 = 2
-    tmp36 = 1
-    tmp37 = -.(tmp4, tmp36)
-    tmp38 = .^(tmp3, tmp37)
-    tmp39 = .*(tmp4, tmp38)
-    tmp40 = -.(tmp39)
-    tmp41 = 1
-    tmp42 = -(tmp4, tmp41)
-    tmp43 = .^(tmp3, tmp42)
-    tmp44 = .*(tmp4, tmp43)
-    tmp45 = tmp44 .* Wd
-    tmp46 = (sum(tmp45, 1))'
-    tmp47 = tmp46 .* We
-    tmp48 = tmp40 .+ tmp47
-    dcost_dx = sum(tmp48, 2)
-end
