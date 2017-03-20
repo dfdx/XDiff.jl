@@ -1,6 +1,6 @@
 
-function permute_indices{Idx<:ExIndex}(lhs_idxs::Vector{Idx},
-                                       rhs_idxs::Vector{Idx})
+function permute_indices{T}(lhs_idxs::Vector{T},
+                            rhs_idxs::Vector{T})
     diff_idxs = union(setdiff(Set(lhs_idxs), Set(rhs_idxs)),
                       setdiff(Set(rhs_idxs), Set(lhs_idxs)))
     f_rhs_idxs = [idx for idx in rhs_idxs if !in(idx, diff_idxs)]
@@ -10,10 +10,10 @@ function permute_indices{Idx<:ExIndex}(lhs_idxs::Vector{Idx},
 end
 
 function rev_step!(g::ExGraph, nd::ExNode{:(=)}, adj::Dict{Symbol, TensorDeriv})
-    y = nd.var
+    y = varname(nd)
     x = dependencies(nd)[1]
     dzdx = deepcopy(adj[y])
-    wrtidxs = permute_indices(nd.idxs[1], nd.idxs[2])
+    wrtidxs = permute_indices(varidxs(nd), get_indices(expr(nd))[1])
     # Q: should we subs indices in dzdx.ex? (assuming not)
     dzdx.wrt.args = [dname(x), wrtidxs...]
     adj[x] = dzdx
@@ -21,7 +21,6 @@ end
 
 function rev_step!(g::ExGraph, nd::ExNode{:constant},
                    adj::Dict{Symbol, TensorDeriv})
-    # adj[nd.var] = TensorDeriv(0.)
     # do nothing
 end
 
@@ -32,8 +31,8 @@ end
 
 
 function rev_step!(g::ExGraph, nd::ExNode{:call}, adj::Dict{Symbol, TensorDeriv})
-    y = nd.var
-    iex = to_iexpr(nd)
+    y = varname(nd)
+    iex = to_expr(nd)
     dzdy = adj[y]
     sizes = g.ctx[:sizes]
     for x in dependencies(nd)
@@ -65,13 +64,13 @@ end
 # other utils
 
 function to_expanded_expr(g::ExGraph, td::TensorDeriv)
-    ex = to_expr(td).args[2]
-    depv = dep_vars(g, ex)
+    ex = expr(td)
+    depv = collect_deps(g, ex)
     dep_exs = Expr[]
     for nd in g.tape
-        if !isa(nd, ExNode{:input}) && nd.var in depv
+        if !isa(nd, ExNode{:input}) && varname(nd) in depv
             # TODO: use expand_const_1(g, nd) ?
-            push!(dep_exs, to_iexpr(nd))
+            push!(dep_exs, to_expr(nd))
         end
     end
     result_var = single_var(td)

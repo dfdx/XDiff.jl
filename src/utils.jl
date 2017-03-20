@@ -22,3 +22,10 @@ type_ansestors{T}(t::Type{Vector{T}}) =
     [t, Vector, DenseVector, AbstractVector, AbstractArray, Any]
 type_ansestors{T}(t::Type{Matrix{T}}) =
     [t, Matrix, DenseMatrix, AbstractMatrix, AbstractArray, Any]
+
+
+
+function bcast_to_call(pex::Expr)
+    @assert pex.head == :(.)
+    return Expr(:call, pex.args[1], pex.args[2].args...)
+end
