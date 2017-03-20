@@ -135,7 +135,7 @@
 
 """Forward pass of differentiation"""
 function forward_pass(g::ExGraph)
-    evaluate!(g, g.tape[end].var)
+    evaluate!(g, varname(g.tape[end]))
     propagate_size!(g)
     return g
 end
@@ -148,13 +148,13 @@ Perform one step of reverse pass. Add derivatives of output variable w.r.t.
 node's dependenices to adjoint dictionary.
 """
 function rev_step!(g::ExGraph, nd::ExNode{:(=)}, adj::Dict{Symbol,Deriv})
-    y = nd.var
+    y = varname(nd)
     x = dependencies(nd)[1]
     adj[x] = adj[y]
 end
 
 function rev_step!(g::ExGraph, nd::ExNode{:constant}, adj::Dict{Symbol,Deriv})
-    adj[nd.var] = Deriv(0.)
+    adj[varname(nd)] = Deriv(0.)
 end
 
 function rev_step!(g::ExGraph, nd::ExNode{:input}, adj::Dict{Symbol,Deriv})
@@ -162,8 +162,8 @@ function rev_step!(g::ExGraph, nd::ExNode{:input}, adj::Dict{Symbol,Deriv})
 end
 
 function rev_step!(g::ExGraph, nd::ExNode{:call}, adj::Dict{Symbol,Deriv})
-    y = nd.var
-    types = [typeof(g.idx[x].val) for x in dependencies(nd)]
+    y = varname(nd)
+    types = [typeof(value(g[x])) for x in dependencies(nd)]
     for (i, x) in enumerate(dependencies(nd))
         xnd = g[x]
         dydx = derivative(expr(nd), types, i, mod=g.ctx[:mod])
@@ -178,8 +178,8 @@ function rev_step!(g::ExGraph, nd::ExNode{:call}, adj::Dict{Symbol,Deriv})
 end
 
 function rev_step!(g::ExGraph, nd::ExNode{:bcast}, adj::Dict{Symbol,Deriv})
-    y = nd.var
-    types = [typeof(g.idx[x].val) for x in dependencies(nd)]
+    y = varname(nd)
+    types = [typeof(value(g[x])) for x in dependencies(nd)]
     for (i, x) in enumerate(dependencies(nd))
         xnd = g[x]
         dydx = derivative(bcast_to_call(expr(nd)), types, i, mod=g.ctx[:mod])
@@ -204,7 +204,7 @@ end
 """Reverse pass of differentiation"""
 function reverse_pass(g::ExGraph, z::Symbol)
     if any(isindexed, g.tape)
-        num_indices = ndims(g[z].val)
+        num_indices = ndims(value(g[z]))
         dz = with_indices(dname(z), num_indices)
         dzwrt = with_indices(dname(z), num_indices+1, num_indices)
         guards = [:($ivar == $iwrt)
@@ -225,7 +225,7 @@ function _rdiff(ex::Expr; ctx=Dict(), inputs...)
     ctx = to_context(ctx)
     g = ExGraph(ex; ctx=ctx, inputs...)
     forward_pass(g)
-    z = g.tape[end].var
+    z = varname(g.tape[end])
     adj = reverse_pass(g, z)
     return g, expand_adjoints(g, adj)
 end
@@ -253,7 +253,7 @@ end
 """
 rdiff(ex::Expr; ctx=Dict(), xs...)
 
-Differentiate expression `ex` w.r.t. variables `xs`. `xs` should be a list
+Differentiate expression `ex` w.r.t. variables `inputs`. `inputs` should be a list
 of key-value pairs with keys representing variables in expression and values
 representing 'example values' (used e.g. for type inference). Returns an array
 of symbolic expressions representing derivatives of ex w.r.t. each of passed
@@ -271,7 +271,7 @@ Options (passed via `ctx`):
 function rdiff(ex::Expr; ctx=Dict(), inputs...)
     ctx = to_context(ctx)
     meth = @get(ctx, :method, any(x -> !isa(x[2], Number), inputs) ? :ein : :vec)
-    if meth == :ein && !is_einstein(ex)
+    if meth == :ein && !isindexed(ex)
         ex = to_einstein(ex; ctx=ctx, inputs...)
     end
     g, adj = _rdiff(ex; ctx=ctx, inputs...)

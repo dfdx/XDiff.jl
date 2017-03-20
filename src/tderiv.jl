@@ -36,11 +36,11 @@ function Base.copy(td::TensorDeriv; dvar=td.dvar, wrt=td.wrt,
 end
 
 expr(td::TensorDeriv) = td.ex
-var_indices(td::TensorDeriv) = convert(Vector{Symbol}, td.dvar.args[2:end])
-wrt_indices(td::TensorDeriv) = convert(Vector{Symbol}, td.wrt.args[2:end])
+var_indices(td::TensorDeriv) = convert(Vector{Any}, td.dvar.args[2:end])
+wrt_indices(td::TensorDeriv) = convert(Vector{Any}, td.wrt.args[2:end])
 deriv_indices(td::TensorDeriv) = vcat(var_indices(td), wrt_indices(td))
 all_indices(td::TensorDeriv) = union(deriv_indices(td),
-                                     flatten(Symbol, get_indices(expr(td))))
+                                     flatten(Any, get_indices(expr(td))))
 
 function to_expr(td::TensorDeriv)
     # dvarname, dvaridxs = string(td.dvar.args[1]), td.dvar.args[2:end]
@@ -63,7 +63,7 @@ end
 Given a set of existing indices and current position of iterator,
 find the next index not in the set.
 """
-function next_index(existing::Set{Symbol}, pos::Int)
+function next_index{T}(existing::Set{T}, pos::Int)
     while pos <= length(IDX_NAMES) && in(IDX_NAMES[pos], existing)
         pos += 1
     end
@@ -75,7 +75,7 @@ function next_index(existing::Set{Symbol}, pos::Int)
 end
 
 
-function next_indices(existing::Set{Symbol}, pos::Int, count::Int)
+function next_indices{T}(existing::Set{T}, pos::Int, count::Int)
     new_indices = Array{Symbol}(0)
     for i=1:count
         new_idx, pos = next_index(existing, pos)
@@ -89,7 +89,7 @@ end
 Given a set of existing indicies and possible duplicates, find for each duplicate
 a replacement - index from IDX_NAMES that is not used yet.
 """
-function index_replacements(existing::Set{Symbol}, maybedups::Vector{Symbol})
+function index_replacements{T}(existing::Set{T}, maybedups::Vector{T})
     repls = Dict{Symbol,Symbol}()
     pos = 1
     for idx in maybedups
@@ -106,12 +106,12 @@ function reindex_with_guards(td::TensorDeriv)
     pairs = Tuple{Symbol,Symbol}[(grd.args[2], grd.args[3]) for grd in td.guards]
     st, new_pairs = reduce_equalities(pairs, DI)
     new_guards = [:($i1 == $i2) for (i1, i2) in new_pairs]
-    new_ex = subs(td.ex, st)
+    new_ex = subs(expr(td), st)
     return copy(td; ex=new_ex, guards=new_guards)
 end
 
 
-function with_pseudo_one{Idx<:ExIndex}(ex::Expr, lhs_idxs::Vector{Idx})
+function with_pseudo_one{T}(ex::Expr, lhs_idxs::Vector{T})
     rhs_idxs = forall_indices(ex)
     sum_idxs = setdiff(rhs_idxs, lhs_idxs)
     if isempty(sum_idxs)
@@ -171,7 +171,7 @@ end
 function tderiv_var(td::TensorDeriv)
     name = Symbol(string(td.dvar.args[1]) * "_" * string(td.wrt.args[1]))
     idxs = vcat(td.dvar.args[2:end], td.wrt.args[2:end])
-    return maybe_indexed(name, idxs)
+    return make_indexed(name, idxs)
 end
 
 
@@ -255,27 +255,51 @@ function ew_to_tensor_rule(ew_rule::DiffRule, diff_idx::Int, num_idxs::Int)
 end
 
 
+"""
+Ensures that its argument is an indexed expression:
 
-function to_tensor_rule(ew_rule::DiffRule, orig_idxs::Vector{Vector{Symbol}}, idx::Int)
+    ensure_indexed(:x, [])          ==> :(x[])
+    ensure_indexed(:X, [:i])        ==> :(x[i])
+    ensure_indexed(:(x[k]), [:i])   ==> :(x[k])
+"""
+function ensure_indexed(ex::Expr, idxs::Vector)
+    @assert (ex.head == :ref) "Argument is not a symbol and not indexed already"
+    return ex
+end
+
+function ensure_indexed(var::Symbol, idxs::Vector)
+    return Expr(:ref, var, idxs...)
+end
+
+
+"""
+Convert scalar diff rule to a tensor diff rule.
+
+ * ew_rule   - elementwise (scalar) rule
+ * orig_idxs - indices of full tensor expression,
+               e.g. for `z[i] = X[i,j] * y[j]` it's [[:i], [:i, :j], [:j]]
+ * idx       - index of input parameter to differentiate w.r.t. it
+"""
+function to_tensor_rule{T}(ew_rule::DiffRule, orig_idxs::Vector{Vector{T}}, idx::Int)
     ew_pat = ew_rule.pat
     op = ew_pat.args[1]
     ew_ex = ew_rule.deriv.ex
     # tensor var names and indices
     tvar_names = TDIFF_VAR_NAMES[1:length(ew_pat.args)-1]
     # tvar_idxs = IDX_NAMES[1:length(orig_idxs[1])]
-    tvars = [maybe_indexed(name, I) for (name, I) in zip(tvar_names, orig_idxs[2:end])]
+    tvars = [make_indexed(name, IX) for (name, IX) in zip(tvar_names, orig_idxs[2:end])]
     tvar_idxs = IDX_NAMES[1:length(orig_idxs[1])]
     # tvars = [Expr(:ref, tvar, tvar_idxs...) for tvar in tvar_names]
     # dvar variable
     var_name = :Z
     dvar_name = dname(var_name)
-    var = maybe_indexed(var_name, orig_idxs[1])
-    dvar = maybe_indexed(dvar_name, orig_idxs[1])
+    var = make_indexed(var_name, orig_idxs[1])
+    dvar = make_indexed(dvar_name, orig_idxs[1])
     # w.r.t. variable
     wrt_name = tvar_names[idx]
     dwrt_name = dname(wrt_name)
     wrt_idxs = next_indices(Set(flatten(Symbol, orig_idxs)), 1, length(orig_idxs[idx + 1]))
-    dwrt = maybe_indexed(dwrt_name, wrt_idxs)
+    dwrt = make_indexed(dwrt_name, wrt_idxs)
     # new pattern
     tpat = Expr(:call, op, tvars...)
     full_tpat = :($var = $tpat)
@@ -288,8 +312,9 @@ function to_tensor_rule(ew_rule::DiffRule, orig_idxs::Vector{Vector{Symbol}}, id
     else
         tguards = Expr[]  # TODO: this should be covered by previous definition too
     end
-    tderiv = TensorDeriv(indexed(dvar, orig_idxs[1]),
-                         indexed(dwrt, wrt_idxs), tex, tguards)
+    # REFAC: indexed => make_indexed
+    tderiv = TensorDeriv(ensure_indexed(dvar, orig_idxs[1]),
+                         ensure_indexed(dwrt, wrt_idxs), tex, tguards)
     return TensorDiffRule(full_tpat, tderiv)
 end
 
@@ -376,7 +401,7 @@ function tderivative(fullex::Expr, idx::Int)
         dex = pack_deriv(unpacked_dex)
         return TensorDeriv(dex)
     else
-        idxs = call_indices(fullex)
+        idxs = get_indices(fullex)
         # elementwise or broadcasting function
         op = opname(current_module(), fullex.args[2].args[1])
         types = [Float64 for i=1:length(fullex.args[2].args)-1]
