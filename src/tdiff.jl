@@ -64,7 +64,7 @@ end
 # other utils
 
 function to_expanded_expr(g::ExGraph, td::TensorDeriv)
-    ex = to_expr(td).args[2]
+    ex = expr(td)
     depv = collect_deps(g, ex)
     dep_exs = Expr[]
     for nd in g.tape
