@@ -37,6 +37,9 @@ function main()
     ctx = Dict(:outfmt => :vec)
     dexs = rdiff(ex; ctx=ctx, inputs...)
 
+    ictx = Dict(:outfmt => :ein)
+    idexs = rdiff(ex; ctx=ictx, inputs...)
+
     
     dcost = fdiff(cost, types)
     @time dWe1 = dcost(vals...)[1]
