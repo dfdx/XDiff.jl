@@ -231,24 +231,6 @@ function _rdiff(ex::Expr; ctx=Dict(), inputs...)
 end
 
 
-function format_output(meth, outfmt, ctx, dexs, inputs)
-    if outfmt == :vec && meth == :ein
-        res = Dict()
-        for (var, dex) in dexs
-            res[var] = from_einstein(dex; ctx=ctx, inputs...)
-        end
-        return res
-    elseif outfmt == :einsum
-        res = Dict()
-        for (var, dex) in dexs
-            res[var] = to_einsum(dex)
-        end
-        return res
-    else
-        dexs
-    end
-end
-
 
 """
 rdiff(ex::Expr; ctx=Dict(), xs...)
@@ -280,6 +262,25 @@ function rdiff(ex::Expr; ctx=Dict(), inputs...)
     outfmt = @get(ctx, :outfmt, :vec)
     outdexs = format_output(meth, outfmt, ctx, dexs, inputs)
     return outdexs
+end
+
+
+function format_output(meth, outfmt, ctx, dexs, inputs)
+    if outfmt == :vec && meth == :ein
+        res = Dict()
+        for (var, dex) in dexs
+            res[var] = from_einstein(dex; ctx=ctx, inputs...)
+        end
+        return res
+    elseif outfmt == :einsum
+        res = Dict()
+        for (var, dex) in dexs
+            res[var] = to_einsum(dex)
+        end
+        return res
+    else
+        dexs
+    end
 end
 
 
