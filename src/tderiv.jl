@@ -7,142 +7,232 @@ const TDIFF_PHS = [:A, :B, :C, :X, :Y, :V, :W, :Z,
 const TDIFF_VAR_NAMES = [:V, :W, :X, :Y]
 
 
-## tensor derivative type
+## TensorDerivExpr - an atom of TensorDeriv
 
-type TensorDeriv <: AbstractDeriv
-    dvar::Expr            # variable being differented, e.g. dz[i,j]
-    wrt::Expr             # variable w.r.t. which we differentiate, e.g. dx[m,n]
-    ex::Any               # derivative expression, e.g. :(y[j, n]) or 1
-    guards::Vector{Expr}  # guards for non-zero elements e.g. [:(j == m)]
+struct TensorDerivExpr
+    var::Union{Symbol,Expr}
+    wrt::Union{Symbol,Expr}
+    ex::Any
+    guards::Vector{Expr}
 end
 
-function TensorDeriv(dex::Expr)
-    dvar, wrt = dex.args[1].args[2:3]
+
+function TensorDerivExpr(dex::Expr)
+    var, wrt = dex.args[1].args[2:3]
     ex = without_guards(dex.args[2])
     guards = get_guards(dex.args[2])
+    return TensorDerivExpr(var, wrt, ex, guards)
+end
+
+
+function Base.copy(tde::TensorDerivExpr; var=variable(tde), wrt=wrtvariable(tde),
+                   ex=expr(tde), guards=guards(td))
     return TensorDeriv(dvar, wrt, ex, guards)
+end
+
+
+Espresso.variable(tde::TensorDerivExpr) = tde.var
+Espresso.varname(tde::TensorDerivExpr) = split_indexed(variable(tde))[1]
+Espresso.varidxs(tde::TensorDerivExpr) = split_indexed(variable(tde))[2]
+
+wrtvariable(tde::TensorDerivExpr) = tde.wrt
+wrtname(tde::TensorDerivExpr) = split_indexed(wrtvariable(tde))[1]
+wrtidxs(tde::TensorDerivExpr) = split_indexed(wrtvariable(tde))[2]
+
+Espresso.expr(tde::TensorDerivExpr) = tde.ex
+Espresso.guards(tde::TensorDerivExpr) = tde.guards
+
+
+# var_indices(td::TensorDeriv) = convert(Vector{Any}, td.dvar.args[2:end])
+# wrt_indices(td::TensorDeriv) = convert(Vector{Any}, td.wrt.args[2:end])
+# deriv_indices(td::TensorDeriv) = vcat(var_indices(td), wrt_indices(td))
+# all_indices(tde::TensorDerivExpr) = union(deriv_indices(td),
+#                                     flatten(Any, get_indices(expr(td))))
+
+function single_var(tde::TensorDerivExpr)
+    new_name = Symbol("$(varname(tde))_$(wrtname(tde))")
+    new_idxs = vcat(varidxs(tde), wrtidxs(tde))
+    return make_indexed(new_name, new_idxs)
+end
+
+
+function to_expr(tde::TensorDerivExpr)
+    lhs = single_var(tde)
+    grds = guards(tde)
+    rhs = !isempty(grds) > 0 ? Expr(:call, :*, expr(tde), grds...) : expr(tde)
+    return :($lhs = $rhs)
+end
+
+
+function to_expr_pp(td::TensorDerivExpr)
+    lhs = :($(variable(tde)) / $(wrtvariable(tde)))
+    grds = guards(tde)
+    rhs = !isempty(grds) > 0 ? Expr(:call, :*, expr(tde), grds...) : expr(tde)x
+    return :($lhs = $rhs)
+end
+
+
+function Base.show(io::IO, tde::TensorDerivExpr)    
+    print(io, to_expr_pp(tde))
+end
+
+
+
+## TensorDeriv
+
+const TDChain = Vector{TensorDerivExpr}
+
+struct TensorDeriv
+    var::Expr                    # variable being differented, e.g. dz[i,j]
+    wrt::Expr                    # variable w.r.t. which we differentiate, e.g. dx[m,n]
+    chains::Vector{TDChain}      # derivative chains that make this tensor derivative
+end
+
+
+function TensorDeriv(tde::TensorDerivExpr)
+    chains = [[tde]]
+    return TensorDeriv(variable(tde), wrtvariable(tde), chains)
+end
+
+
+Espresso.variable(td::TensorDeriv) = td.var
+Espresso.varname(td::TensorDeriv) = split_indexed(variable(td))[1]
+Espresso.varidxs(td::TensorDeriv) = split_indexed(variable(td))[2]
+
+wrtvariable(td::TensorDeriv) = td.wrt
+wrtname(td::TensorDeriv) = split_indexed(wrtvariable(td))[1]
+wrtidxs(td::TensorDeriv) = split_indexed(wrtvariable(td))[2]
+
+chains(td::TensorDeriv) = td.chains
+last_chain(td::TensorDeriv) = td.chains[end]
+
+
+function single_var(td::TensorDeriv)
+    new_name = Symbol("$(varname(td))_$(wrtname(td))")
+    new_idxs = vcat(varidxs(td), wrtidxs(td))
+    return make_indexed(new_name, new_idxs)
+end
+
+
+function Base.copy(td::TensorDeriv; var=variable(td), wrt=wrtvariable(td),
+                   chains::Vector{TDChain}=chains(td))
+    return TensorDeriv(dvar, wrt, chain)
 end
 
 
 function Base.show(io::IO, td::TensorDeriv)
-    grds = (length(td.guards) > 0 ?
-            (" * " * join(["($g)" for g in td.guards], " * ")) : "")
-    print(io, "$(td.dvar)/$(td.wrt) = $(td.ex) $grds")
+    chain_lengths = join(map(length, chains(td)), ",")
+    lhs = :($(variable(td)) / $(wrtvariable(td)))
+    print(io, "TensorDeriv($lhs | chains: $chain_lengths)")
 end
 
-function Base.copy(td::TensorDeriv; dvar=td.dvar, wrt=td.wrt,
-              ex=td.ex, guards=td.guards)
-    return TensorDeriv(dvar, wrt, ex, guards)
+
+function to_expr(ch::TDChain)
+    return Expr(:block, map(to_expr, ch)...)
 end
 
-expr(td::TensorDeriv) = td.ex
-var_indices(td::TensorDeriv) = convert(Vector{Any}, td.dvar.args[2:end])
-wrt_indices(td::TensorDeriv) = convert(Vector{Any}, td.wrt.args[2:end])
-deriv_indices(td::TensorDeriv) = vcat(var_indices(td), wrt_indices(td))
-all_indices(td::TensorDeriv) = union(deriv_indices(td),
-                                     flatten(Any, get_indices(expr(td))))
 
 function to_expr(td::TensorDeriv)
-    # dvarname, dvaridxs = string(td.dvar.args[1]), td.dvar.args[2:end]
-    # wrtname, wrtidxs = string(td.wrt.args[1]), td.wrt.args[2:end]
-    # lhs = Expr(:ref, Symbol(dvarname, wrtname), dvaridxs..., wrtidxs...)
-    lhs = :($(td.dvar) / $(td.wrt))
-    rhs = length(td.guards) > 0 ? Expr(:call, :*, td.ex, td.guards...) : td.ex
-    return Expr(:(=), lhs, rhs)
-end
-
-function single_var(td::TensorDeriv)
-    new_name = Symbol("$(td.dvar.args[1])_$(td.wrt.args[1])")
-    new_idxs = vcat(td.dvar.args[2:end], td.wrt.args[2:end])
-    return Expr(:ref, new_name, new_idxs...)
-end
-
-
-
-"""
-Given a set of existing indices and current position of iterator,
-find the next index not in the set.
-"""
-function next_index{T}(existing::Set{T}, pos::Int)
-    while pos <= length(IDX_NAMES) && in(IDX_NAMES[pos], existing)
-        pos += 1
-    end
-    if pos <= length(IDX_NAMES)
-        return IDX_NAMES[pos], pos + 1
+    if length(chains(td)) == 1 && length(last_chain(td)) == 1
+        return to_expr(last_chain(td)[1])
     else
-        throw(BoundsError("IDX_NAMES"))
-    end
-end
-
-
-function next_indices{T}(existing::Set{T}, pos::Int, count::Int)
-    new_indices = Array{Symbol}(0)
-    for i=1:count
-        new_idx, pos = next_index(existing, pos)
-        push!(new_indices, new_idx)
-    end
-    return new_indices
-end
-
-
-"""
-Given a set of existing indicies and possible duplicates, find for each duplicate
-a replacement - index from IDX_NAMES that is not used yet.
-"""
-function index_replacements{T}(existing::Set{T}, maybedups::Vector{T})    
-    repls = Dict{Symbol,Symbol}()
-    pos = 1
-    for idx in maybedups
-        # maybedups should also be included in existing index set
-        all_existing = union(existing, Set(maybedups), Set(keys(repls)))        
-        if in(idx, existing) && !in(idx, keys(repls))
-            repls[idx], pos = next_index(all_existing, pos)
+        for (i, ch) in enumerate(chains(td))
+            ch_ex = to_expr(ch)
+            # ch_var =
+            # TODO:
+            # 1) make single block of all chain expressions
+            # 2) remove duplicates (?)
+            # 3) create intermediate vars like dz_dx_1[i,j], dz_dx_2[i,j], etc.
+            # 4) add their sum as the last expression
         end
     end
-    return repls
 end
 
 
-function reindex_with_guards(td::TensorDeriv)
-    DI = union(Set{Symbol}(td.dvar.args[2:end]), Set{Symbol}(td.wrt.args[2:end]))
-    pairs = Tuple{Symbol,Symbol}[(grd.args[2], grd.args[3]) for grd in td.guards]
-    st, new_pairs = reduce_equalities(pairs, DI)
-    new_guards = [:($i1 == $i2) for (i1, i2) in new_pairs]
-    new_ex = subs(expr(td), st)
-    return copy(td; ex=new_ex, guards=new_guards)
-end
+# """
+# Given a set of existing indices and current position of iterator,
+# find the next index not in the set.
+# """
+# function next_index{T}(existing::Set{T}, pos::Int)
+#     while pos <= length(IDX_NAMES) && in(IDX_NAMES[pos], existing)
+#         pos += 1
+#     end
+#     if pos <= length(IDX_NAMES)
+#         return IDX_NAMES[pos], pos + 1
+#     else
+#         throw(BoundsError("IDX_NAMES"))
+#     end
+# end
 
 
-function with_pseudo_one{T}(ex::Expr, lhs_idxs::Vector{T})
-    rhs_idxs = forall_indices(ex)
-    sum_idxs = setdiff(rhs_idxs, lhs_idxs)
-    if isempty(sum_idxs)
-        return ex
-    else
-        pseudo_one = Expr(:ref, :I, sum_idxs...)
-        return Expr(:call, :*, ex, pseudo_one)
-    end
-end
+# function next_indices{T}(existing::Set{T}, pos::Int, count::Int)
+#     new_indices = Array{Symbol}(0)
+#     for i=1:count
+#         new_idx, pos = next_index(existing, pos)
+#         push!(new_indices, new_idx)
+#     end
+#     return new_indices
+# end
 
-with_pseudo_one(x, lhs_idxs) = x
 
-"""
-Reindex second tensor derivative so that:
+# """
+# Given a set of existing indicies and possible duplicates, find for each duplicate
+# a replacement - index from IDX_NAMES that is not used yet.
+# """
+# function index_replacements{T}(existing::Set{T}, maybedups::Vector{T})
+#     repls = Dict{Symbol,Symbol}()
+#     pos = 1
+#     for idx in maybedups
+#         # maybedups should also be included in existing index set
+#         all_existing = union(existing, Set(maybedups), Set(keys(repls)))
+#         if in(idx, existing) && !in(idx, keys(repls))
+#             repls[idx], pos = next_index(all_existing, pos)
+#         end
+#     end
+#     return repls
+# end
 
-    * td2's var indices match td1's w.r.t. indices
-    * no other indices in td2 equal any indices in td1
-"""
-function reindex_to_match(dzdy::TensorDeriv, dydx::TensorDeriv)
-    common_idxs_st = Dict(zip(var_indices(dydx), wrt_indices(dzdy)))
-    other_idxs_st = index_replacements(Set(all_indices(dzdy)), all_indices(dydx))
-    st = merge(other_idxs_st, common_idxs_st)
-    dydx_dvar = subs(dydx.dvar, st)
-    dydx_wrt = subs(dydx.wrt, st)
-    dydx_ex = subs(dydx.ex, st)
-    dydx_guards = Expr[subs(g, st) for g in dydx.guards]
-    new_dydx = TensorDeriv(dydx_dvar, dydx_wrt, dydx_ex, dydx_guards)
-    return dzdy, new_dydx
-end
+
+# function reindex_with_guards(td::TensorDeriv)
+#     DI = union(Set{Symbol}(td.dvar.args[2:end]), Set{Symbol}(td.wrt.args[2:end]))
+#     pairs = Tuple{Symbol,Symbol}[(grd.args[2], grd.args[3]) for grd in td.guards]
+#     st, new_pairs = reduce_equalities(pairs, DI)
+#     new_guards = [:($i1 == $i2) for (i1, i2) in new_pairs]
+#     new_ex = subs(expr(td), st)
+#     return copy(td; ex=new_ex, guards=new_guards)
+# end
+
+
+# function with_pseudo_one{T}(ex::Expr, lhs_idxs::Vector{T})
+#     rhs_idxs = forall_indices(ex)
+#     sum_idxs = setdiff(rhs_idxs, lhs_idxs)
+#     if isempty(sum_idxs)
+#         return ex
+#     else
+#         pseudo_one = Expr(:ref, :I, sum_idxs...)
+#         return Expr(:call, :*, ex, pseudo_one)
+#     end
+# end
+
+# with_pseudo_one(x, lhs_idxs) = x
+
+# """
+# Reindex second tensor derivative so that:
+
+#     * td2's var indices match td1's w.r.t. indices
+#     * no other indices in td2 equal any indices in td1
+# """
+# function reindex_to_match(dzdy::TensorDeriv, dydx::TensorDeriv)
+#     common_idxs_st = Dict(zip(var_indices(dydx), wrt_indices(dzdy)))
+#     other_idxs_st = index_replacements(Set(all_indices(dzdy)), all_indices(dydx))
+#     st = merge(other_idxs_st, common_idxs_st)
+#     dydx_dvar = subs(dydx.dvar, st)
+#     dydx_wrt = subs(dydx.wrt, st)
+#     dydx_ex = subs(dydx.ex, st)
+#     dydx_guards = Expr[subs(g, st) for g in dydx.guards]
+#     new_dydx = TensorDeriv(dydx_dvar, dydx_wrt, dydx_ex, dydx_guards)
+#     return dzdy, new_dydx
+# end
 
 
 """
@@ -151,7 +241,7 @@ Example:
 
     dzdx = dzdy ⊗ dydx
 
-which may expand to:     
+which may expand to:
 
     dz[]/dy[i] = v[i]
     dy[i]/dx[j] = w[i,j]
