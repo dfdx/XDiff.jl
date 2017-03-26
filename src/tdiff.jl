@@ -1,4 +1,46 @@
 
+## utils
+
+function extend_deriv!(dg::EinGraph, dzdx::TensorDeriv)
+    vname, idxs = split_indexed(single_var(dzdx))
+    old_idxs = varidxs(dg[vname])
+    var = make_indexed(vname, old_idxs)
+    # substitution table to reindex new dzdx with the old indices
+    st = Dict(zip(idxs, old_idxs))
+    subderivs = find_related(dg, vname)
+    pos = indexof(dg, vname)
+    if isempty(subderivs)
+        # first split
+        ex_1 = getexpr(dg[vname])
+        ex_2 = subs(getexpr(dzdx), st)
+        vname_1 = Symbol("$(vname)__1")
+        var_1 = make_indexed(vname_1, old_idxs)
+        vname_2 = Symbol("$(vname)__2")
+        var_2 = make_indexed(vname_2, old_idxs)
+        sub_dg = EinGraph()
+        parse!(sub_dg, :($var_1 = $ex_1))
+        parse!(sub_dg, :($var_2 = $ex_2))
+        parse!(sub_dg, :($var = $var_1 .+ $var_2))
+        sub_dg = fuse_equal(sub_dg)
+        new_nodes = sub_dg.tape
+    else
+        # dg already contains subderivatives for dzdx_v
+        last_idx = parse(Int, split(subderivs[end] |> String, "__")[end])
+        new_var = make_indexed(Symbol("$(vname)__$(last_idx + 1)"), old_idxs)
+        new_ex = subs(getexpr(dzdx), st)
+        prev_ex = getexpr(dg[vname])
+        sub_dg = EinGraph()
+        parse!(sub_dg, :($new_var = $new_ex))
+        parse!(sub_dg, :($var = $prev_ex .+ $new_var))
+        sub_dg = fuse_equal(sub_dg)
+        new_nodes = sub_dg.tape
+    end
+    delete!(dg, pos)
+    insert!(dg, pos, new_nodes)
+    return dg
+end
+
+
 function permute_indices{T}(lhs_idxs::Vector{T},
                             rhs_idxs::Vector{T})
     diff_idxs = union(setdiff(Set(lhs_idxs), Set(rhs_idxs)),
@@ -9,47 +51,6 @@ function permute_indices{T}(lhs_idxs::Vector{T},
     return [get(st, idx, idx) for idx in rhs_idxs]
 end
 
-function rev_step!(g::ExGraph, nd::ExNode{:(=)}, adj::Dict{Symbol, TensorDeriv})
-    y = varname(nd)
-    x = dependencies(nd)[1]
-    dzdx = deepcopy(adj[y])
-    wrtidxs = permute_indices(varidxs(nd), get_indices(expr(nd))[1])
-    # Q: should we subs indices in dzdx.ex? (assuming not)
-    dzdx.wrt.args = [dname(x), wrtidxs...]
-    adj[x] = dzdx
-end
-
-function rev_step!(g::ExGraph, nd::ExNode{:constant},
-                   adj::Dict{Symbol, TensorDeriv})
-    # do nothing
-end
-
-function rev_step!(g::ExGraph, nd::ExNode{:input},
-                   adj::Dict{Symbol,TensorDeriv})
-    # do nothing
-end
-
-
-function rev_step!(g::ExGraph, nd::ExNode{:call}, adj::Dict{Symbol, TensorDeriv})
-    y = varname(nd)
-    iex = to_expr(nd)
-    dzdy = adj[y]
-    sizes = g.ctx[:sizes]
-    for x in dependencies(nd)
-        dydx = tderivative(iex, x)
-        dzdx = dzdy ⊗ dydx        
-        if haskey(adj, x)
-            adj[x] = adj[x] ⊕ dzdx
-        else
-            adj[x] = dzdx
-        end
-        if x != :I
-            dzdx_name = single_var(dzdx).args[1]
-            sizes[dzdx_name] = deriv_size(sizes[g.ctx[:z_var]], sizes[x])
-        end
-    end
-end
-
 
 function deriv_size(z_size::Expr, x_size::Expr)
     if z_size == :(())
@@ -57,38 +58,90 @@ function deriv_size(z_size::Expr, x_size::Expr)
     else
         # TODO: there should be a better representation of (z_size..., x_size...)
         return :($(z_size)..., $(x_size)...)
-        
+
     end
 end
 
-# other utils
 
-function to_expanded_expr(g::ExGraph, td::TensorDeriv)
-    ex = expr(td)
-    depv = collect_deps(g, ex)
-    dep_exs = Expr[]
-    for nd in g.tape
-        if !isa(nd, ExNode{:input}) && varname(nd) in depv
-            # TODO: use expand_const_1(g, nd) ?
-            push!(dep_exs, to_expr(nd))
+
+## reverse pass
+
+
+function rev_step!(g::EinGraph, dg::EinGraph, nd::ExNode{:(=)})
+    z = g.ctx[:z_var]
+    y = varname(nd)
+    x = dependencies(nd)[1]
+    dzdy_var = getvar(dg[deriv_name(z, y)])
+    dzdx_vname = deriv_name(z, x)
+    dzdx_idxs = varidxs(g[x])
+    dzdx_var = make_indexed(dzdx_vname, dzdx_idxs)
+    dzdx_full_ex = :($dzdx_var = $dzdy_var)
+    parse!(dg, dzdx_full_ex)
+end
+
+
+function rev_step!(g::EinGraph, dg::EinGraph, nd::ExNode{:constant})
+    # do nothing
+end
+
+function rev_step!(g::EinGraph, dg::EinGraph, nd::ExNode{:input})
+    # do nothing
+end
+
+
+function rev_step!(g::EinGraph, dg::EinGraph, nd::ExNode{:call})
+    y = varname(nd)
+    iex = to_expr(nd)
+    z = g.ctx[:z_var]
+    cg = cat(g, dg)
+    dzdy = TensorDeriv(g, dg[deriv_name(z, y)] |> to_expr)
+    sizes = g.ctx[:sizes]
+    for x in dependencies(nd)
+        if isa(g[x], ExNode{:constant})
+            # don't clog dg with unnesessary derivs
+            continue
         end
+        dydx = tderivative(iex, x)
+        # dzdy, dydx = reindex_to_match(dzdy, dydx)
+        dzdx = dzdy ⊗ dydx
+        dzdx = expand_const(cg, dzdx) |> simplify
+        dzdx_vname = split_indexed(single_var(dzdx))[1]
+        if haskey(dg, dzdx_vname)
+            extend_deriv!(dg, dzdx)
+        else
+            parse!(dg, to_expr(dzdx))
+        end
+        sizes[dzdx_vname] = deriv_size(sizes[z], sizes[x])
     end
-    result_var = single_var(td)
-    result_ex = :($result_var = $ex)
-    return to_block(dep_exs..., result_ex)
 end
 
 
-function expand_adjoints(g::ExGraph, adj::Dict{Symbol, TensorDeriv})
-    return Dict([(var, to_expanded_expr(g, td)) for (var, td) in adj])
+function make_dzdz_expr(z::Symbol, z_idxs::Vector)
+    vname = deriv_name(z, z)
+    wrt_idxs = next_indices(Set(z_idxs), 1, length(z_idxs))
+    vidxs = vcat(z_idxs, wrt_idxs)
+    var = make_indexed(vname, vidxs)
+    guards = Expr[:($i == $j) for (i,j) in zip(z_idxs, wrt_idxs)]
+    if isempty(guards)
+        return :($var = 1.0)
+    elseif length(guards) == 1
+        return :($var = 1.0 * $(guards[1]))
+    else
+        guard_subex = Expr(:call, :*, guards...)
+        return :($dzdz_var = 1.0 * $guard_subex)
+    end
 end
 
 
-function tdiff(ex::Expr; ctx=Dict(), inputs...)
-    ctx = to_context(ctx)
-    tex = to_einstein(ex; inputs...)
-    g, adj = _rdiff(tex; ctx=ctx, inputs...)
-    vars = Set([var for (var, val) in inputs])
-    dexs = Dict([(var, dex) for (var, dex) in adj if in(var, vars)])
-    return dexs
+function reverse_pass!(g::EinGraph)
+    z_var = getvar(g[end])
+    z, z_idxs = split_indexed(z_var)
+    g.ctx[:z_var] = z
+    dzdz_ex = make_dzdz_expr(z, z_idxs)
+    dg = EinGraph(dzdz_ex)
+    for nd in reverse(g.tape)
+        rev_step!(g, dg, nd)
+    end
+    outvars = [deriv_name(z, varname(nd)) for nd in g.tape if isa(nd, ExNode{:input})]
+    return fuse_equal(dg; outvars=outvars)
 end

@@ -4,11 +4,11 @@ import ReverseDiffSource
 
 function ann(w1, w2, w3, x1)
     _x2 = w1 * x1
-    x2 = log(1. + exp(_x2))   # soft RELU unit
+    x2 = log.(1. + exp.(_x2))   # soft RELU unit
     _x3 = w2 * x2
-    x3 = log(1. + exp(_x3))   # soft RELU unit
-    x4 = sum(w3 * x3)
-    return 1. ./ (1. + exp(-x4))  # sigmoid output
+    x3 = log.(1. + exp.(_x3))   # soft RELU unit
+    x4 = sum.(w3 * x3)
+    return 1. ./ (1. + exp.(-x4))  # sigmoid output
 end
 
 

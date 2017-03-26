@@ -3,29 +3,12 @@
 
 const IDX_NAMES = Espresso.IDX_NAMES
 
-@compat abstract type AbstractDeriv end
-
-struct Deriv
-    ex::Any
-end
-
-function ⊗(d1::Deriv, d2::Deriv)
-    return Deriv(simplify(d1.ex ⊗ d2.ex))
-end
-
-function ⊕(d1::Deriv, d2::Deriv)
-    return Deriv(simplify(d1.ex ⊕ d2.ex))
-end
-
-expr(d::Deriv) = d.ex
-to_expr(d::Deriv) = d.ex
-Base.show(io::IO, d::Deriv) = print(io, expr(d))
 
 @compat abstract type AbstractDiffRule end
 
 struct DiffRule <: AbstractDiffRule
     pat::Expr        # pattern of expression to differentiate
-    deriv::Deriv     # pattern of differentiation expression
+    dpat::Any        # pattern of differentiation expression
 end
 
 
@@ -57,19 +40,14 @@ automatically handled by chain rule in the differentiation engine.
 
 """
 macro diff_rule(ex::Expr, idx::Int, dex::Any)
-    if ex.head == :call
-        op = opname(current_module(), ex.args[1])
-        types = [eval(exa.args[2]) for exa in ex.args[2:end]]
-        new_args = Symbol[exa.args[1] for exa in ex.args[2:end]]
-        canonical_ex = Expr(:call, op, new_args...)
-        # canonical_ex = canonical_calls(current_module(), ex)
-        canonical_dex = canonical_calls(current_module(), dex)
-        DIFF_RULES[(op, types, idx)] = DiffRule(canonical_ex,
-                                                Deriv(canonical_dex))
-        # println("added new one")
-    else
-        error("Can only define derivative on calls")
-    end
+    @assert ex.head == :call
+    op = opname(current_module(), ex.args[1])
+    types = [eval(exa.args[2]) for exa in ex.args[2:end]]
+    new_args = Symbol[exa.args[1] for exa in ex.args[2:end]]
+    canonical_ex = Expr(:call, op, new_args...)
+    # canonical_ex = canonical_calls(current_module(), ex)
+    canonical_dex = canonical_calls(current_module(), dex)
+    DIFF_RULES[(op, types, idx)] = DiffRule(canonical_ex, canonical_dex)    
 end
 
 
@@ -103,12 +81,19 @@ end
 Apply rule retrieved using `find_rule()` to an expression.
 """
 function apply_rule(rule::DiffRule, ex::Expr)
-    deriv_ex = rewrite(ex, rule.pat, rule.deriv.ex; phs=DIFF_PHS)
-    return Deriv(deriv_ex)
+    deriv_ex = rewrite(ex, rule.pat, rule.dpat; phs=DIFF_PHS)
+    return deriv_ex
 end
 
 
 ## register rule
+
+function without_output_tuple(ex::Expr)
+    @assert(ex.head == :block && ex.args[end].head == :tuple,
+            "Got unexpected derivative expression: $ex")
+    return Expr(ex.head, ex.args[1:end-1]...)
+end
+
 
 """
 Register new differentiation rule for function `fname` with arguments
@@ -118,13 +103,11 @@ function register_rule(fname::OpName, types::Vector{DataType}, idx::Int)
     # TODO: check module
     f = eval(fname)
     args, ex = funexpr(f, (types...))
-    ex = sanitize(ex)
-    # TODO: replace `ones()` with `example_val()` that can handle arrays
+    # ex = sanitize(ex)
     xs = [(arg, ones(T)[1]) for (arg, T) in zip(args, types)]
-    dexs = rdiff(ex; xs...)
-    dex = dexs[args[idx]]
+    dex = rdiff(ex; xs...) |> without_output_tuple
     fex = Expr(:call, fname, args...)
-    new_rule = DiffRule(fex, Deriv(dex))
+    new_rule = DiffRule(fex, dex)
     DIFF_RULES[(fname, types, idx)] = new_rule
     return new_rule
 end
@@ -140,4 +123,4 @@ function derivative(pex::Expr, types::Vector{DataType}, idx::Int;
     return apply_rule(rule, pex)
 end
 
-derivative(var::Symbol, types::Vector{DataType}, idx::Int) = Deriv(1)
+derivative(var::Symbol, types::Vector{DataType}, idx::Int) = 1

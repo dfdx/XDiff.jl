@@ -1,4 +1,5 @@
 
+using XDiff
 using ReverseDiff: compile_gradient
 
 logistic(x) = 1 ./ (1 + exp.(-x))
@@ -40,15 +41,28 @@ b2 = rand(3)
 Wd = rand(5, 3)
 
 input_tuple = (We1, We2, Wd, b1, b2, x)
+inputs = [:We1 => We1, :We2 => We2, :Wd => Wd, :b1 => b1, :b2 => b2, :x =>  x]
 types = map(typeof, input_tuple)
 
+
+ex = quote
+    firstLayer = logistic(We1 * x + b1)
+    encodedInput = logistic(We2 * firstLayer + b2)
+    reconstructedInput = logistic(Wd * encodedInput)
+    cost = sum((reconstructedInput - x) .^ 2.0)
+end
+
+
+dex = rdiff(ex; inputs...)
+dvals = eval(dex)
+
 # XDiff: generate a dict of derivative expressions
-dexs = rdiff(autoencoder_cost, types)
-dexs[:We1]
+# dex = rdiff(autoencoder_cost, types)
+#  dvals = eval(dex)
 
 # XDiff: generate derivative functions and calculate value at the same point
-dcost = fdiff(autoencoder_cost, types)
-dvals = dcost(We1, We2, Wd, b1, b2, x)
+# dcost = fdiff(autoencoder_cost, types)
+# dvals = dcost(We1, We2, Wd, b1, b2, x)
 
 # ReverseDiff: generate and apply derivative functions
 const ∇f! = compile_gradient(autoencoder_cost_reversediff, input_tuple)
@@ -57,3 +71,9 @@ results = map(similar, input_tuple)
 
 # compare results
 @test isapprox(dvals[1], results[1])
+
+
+
+# TODO:
+# 1) find why :tmp995 is missing
+# 2) optimize common subexpressions
