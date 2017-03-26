@@ -64,15 +64,15 @@ function to_expr(tde::TensorDerivExpr)
 end
 
 
-function to_expr_pp(td::TensorDerivExpr)
+function to_expr_pp(tde::TensorDerivExpr)
     lhs = :($(variable(tde)) / $(wrtvariable(tde)))
     grds = guards(tde)
-    rhs = !isempty(grds) > 0 ? Expr(:call, :*, expr(tde), grds...) : expr(tde)x
+    rhs = !isempty(grds) > 0 ? Expr(:call, :*, expr(tde), grds...) : expr(tde)
     return :($lhs = $rhs)
 end
 
 
-function Base.show(io::IO, tde::TensorDerivExpr)    
+function Base.show(io::IO, tde::TensorDerivExpr)
     print(io, to_expr_pp(tde))
 end
 
@@ -83,15 +83,19 @@ end
 const TDChain = Vector{TensorDerivExpr}
 
 struct TensorDeriv
-    var::Expr                    # variable being differented, e.g. dz[i,j]
-    wrt::Expr                    # variable w.r.t. which we differentiate, e.g. dx[m,n]
+    var::Union{Symbol,Expr}      # variable being differented, e.g. dz[i,j]
+    wrt::Union{Symbol,Expr}      # variable w.r.t. which we differentiate, e.g. dx[m,n]
     chains::Vector{TDChain}      # derivative chains that make this tensor derivative
 end
 
 
 function TensorDeriv(tde::TensorDerivExpr)
-    chains = [[tde]]
-    return TensorDeriv(variable(tde), wrtvariable(tde), chains)
+    chs = [[tde]]
+    return TensorDeriv(variable(tde), wrtvariable(tde), chs)
+end
+
+function TensorDeriv(ex::Expr)
+    return TensorDeriv(TensorDerivExpr(ex))
 end
 
 
@@ -136,15 +140,25 @@ function to_expr(td::TensorDeriv)
     if length(chains(td)) == 1 && length(last_chain(td)) == 1
         return to_expr(last_chain(td)[1])
     else
+        block = Expr(:block)
+        sub_names = Array{Any}(0)
         for (i, ch) in enumerate(chains(td))
-            ch_ex = to_expr(ch)
-            # ch_var =
-            # TODO:
-            # 1) make single block of all chain expressions
-            # 2) remove duplicates (?)
-            # 3) create intermediate vars like dz_dx_1[i,j], dz_dx_2[i,j], etc.
-            # 4) add their sum as the last expression
+            for tde in ch
+                push!(block.args, to_expr(tde))
+            end
+            # rename last var, adding its index to the name
+            last_ex = block.args[end]
+            svar, idxs = split_indexed(last_ex.args[1])
+            new_svar = Symbol("$(svar)_$(i)")
+            last_ex.args[1] = make_indexed(new_svar, idxs)
+            push!(sub_names, split_indexed(last_ex.args[1])[1])
         end
+        td_svar = single_var(td)
+        idxs = split_indexed(td_svar)[2]
+        sub_vars = [make_indexed(name, idxs) for name in sub_names]
+        sum_ex = length(sub_vars) == 1 ? sub_vars[1] : Expr(:.+, sub_vars...)
+        push!(block.args, :($td_svar = $sum_ex))
+        return block
     end
 end
 
@@ -249,15 +263,22 @@ which may expand to:
 """
 function ⊗(dzdy::TensorDeriv, dydx::TensorDeriv)
     # can only multiply related derivatives, e.g. dz/dy * dy/dx
-    @assert dzdy.wrt.args[1] == dydx.dvar.args[1]
-    dzdy, dydx = reindex_to_match(dzdy, dydx)
-    # add pseudo one to enable accurate parsing later
-    new_ex1 = with_pseudo_one(expr(dzdy), deriv_indices(dzdy))
-    new_ex2 = with_pseudo_one(expr(dydx), deriv_indices(dydx))
-    new_ex = simplify(new_ex1 ⊗ new_ex2)
-    new_guards = vcat(dzdy.guards, dydx.guards)
-    new_td = TensorDeriv(dzdy.dvar, dydx.wrt, new_ex, new_guards)
-    return reindex_with_guards(new_td)
+    @assert wrtname(dzdy) == varname(dydx)
+    # TODO: copy previous chains
+    chs = vcat(last_chain(dzdy), last_chain(dydx))
+    # TODO: add `dzdx = dzdy .* expr(dydx)`
+    # TODO: reindex above expressoion with guards
+    dzdx = TensorDeriv(variable(dzdy), wrtvariable(dydx), [chs])
+    return dzdx
+    
+    # dzdy, dydx = reindex_to_match(dzdy, dydx)
+    # # add pseudo one to enable accurate parsing later
+    # new_ex1 = with_pseudo_one(expr(dzdy), deriv_indices(dzdy))
+    # new_ex2 = with_pseudo_one(expr(dydx), deriv_indices(dydx))
+    # new_ex = simplify(new_ex1 ⊗ new_ex2)
+    # new_guards = vcat(dzdy.guards, dydx.guards)
+    # new_td = TensorDeriv(dzdy.dvar, dydx.wrt, new_ex, new_guards)
+    # return reindex_with_guards(new_td)
 end
 
 function tderiv_var(td::TensorDeriv)
