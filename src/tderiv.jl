@@ -163,48 +163,48 @@ function to_expr(td::TensorDeriv)
 end
 
 
-# """
-# Given a set of existing indices and current position of iterator,
-# find the next index not in the set.
-# """
-# function next_index{T}(existing::Set{T}, pos::Int)
-#     while pos <= length(IDX_NAMES) && in(IDX_NAMES[pos], existing)
-#         pos += 1
-#     end
-#     if pos <= length(IDX_NAMES)
-#         return IDX_NAMES[pos], pos + 1
-#     else
-#         throw(BoundsError("IDX_NAMES"))
-#     end
-# end
+"""
+Given a set of existing indices and current position of iterator,
+find the next index not in the set.
+"""
+function next_index{T}(existing::Set{T}, pos::Int)
+    while pos <= length(IDX_NAMES) && in(IDX_NAMES[pos], existing)
+        pos += 1
+    end
+    if pos <= length(IDX_NAMES)
+        return IDX_NAMES[pos], pos + 1
+    else
+        throw(BoundsError("IDX_NAMES"))
+    end
+end
 
 
-# function next_indices{T}(existing::Set{T}, pos::Int, count::Int)
-#     new_indices = Array{Symbol}(0)
-#     for i=1:count
-#         new_idx, pos = next_index(existing, pos)
-#         push!(new_indices, new_idx)
-#     end
-#     return new_indices
-# end
+function next_indices{T}(existing::Set{T}, pos::Int, count::Int)
+    new_indices = Array{Symbol}(0)
+    for i=1:count
+        new_idx, pos = next_index(existing, pos)
+        push!(new_indices, new_idx)
+    end
+    return new_indices
+end
 
 
-# """
-# Given a set of existing indicies and possible duplicates, find for each duplicate
-# a replacement - index from IDX_NAMES that is not used yet.
-# """
-# function index_replacements{T}(existing::Set{T}, maybedups::Vector{T})
-#     repls = Dict{Symbol,Symbol}()
-#     pos = 1
-#     for idx in maybedups
-#         # maybedups should also be included in existing index set
-#         all_existing = union(existing, Set(maybedups), Set(keys(repls)))
-#         if in(idx, existing) && !in(idx, keys(repls))
-#             repls[idx], pos = next_index(all_existing, pos)
-#         end
-#     end
-#     return repls
-# end
+"""
+Given a set of existing indicies and possible duplicates, find for each duplicate
+a replacement - index from IDX_NAMES that is not used yet.
+"""
+function index_replacements{T}(existing::Set{T}, maybedups::Vector{T})
+    repls = Dict{Symbol,Symbol}()
+    pos = 1
+    for idx in maybedups
+        # maybedups should also be included in existing index set
+        all_existing = union(existing, Set(maybedups), Set(keys(repls)))
+        if in(idx, existing) && !in(idx, keys(repls))
+            repls[idx], pos = next_index(all_existing, pos)
+        end
+    end
+    return repls
+end
 
 
 # function reindex_with_guards(td::TensorDeriv)
@@ -230,23 +230,23 @@ end
 
 # with_pseudo_one(x, lhs_idxs) = x
 
-# """
-# Reindex second tensor derivative so that:
+"""
+Reindex second tensor derivative so that:
 
-#     * td2's var indices match td1's w.r.t. indices
-#     * no other indices in td2 equal any indices in td1
-# """
-# function reindex_to_match(dzdy::TensorDeriv, dydx::TensorDeriv)
-#     common_idxs_st = Dict(zip(var_indices(dydx), wrt_indices(dzdy)))
-#     other_idxs_st = index_replacements(Set(all_indices(dzdy)), all_indices(dydx))
-#     st = merge(other_idxs_st, common_idxs_st)
-#     dydx_dvar = subs(dydx.dvar, st)
-#     dydx_wrt = subs(dydx.wrt, st)
-#     dydx_ex = subs(dydx.ex, st)
-#     dydx_guards = Expr[subs(g, st) for g in dydx.guards]
-#     new_dydx = TensorDeriv(dydx_dvar, dydx_wrt, dydx_ex, dydx_guards)
-#     return dzdy, new_dydx
-# end
+    * td2's var indices match td1's w.r.t. indices
+    * no other indices in td2 equal any indices in td1
+"""
+function reindex_to_match(dzdy::TensorDeriv, dydx::TensorDeriv)
+    common_idxs_st = Dict(zip(varidxs(dydx), wrtidxs(dzdy)))
+    other_idxs_st = index_replacements(Set(all_indices(dzdy)), all_indices(dydx))
+    st = merge(other_idxs_st, common_idxs_st)
+    dydx_dvar = subs(dydx.dvar, st)
+    dydx_wrt = subs(dydx.wrt, st)
+    dydx_ex = subs(dydx.ex, st)
+    dydx_guards = Expr[subs(g, st) for g in dydx.guards]
+    new_dydx = TensorDeriv(dydx_dvar, dydx_wrt, dydx_ex, dydx_guards)
+    return dzdy, new_dydx
+end
 
 
 """
@@ -264,59 +264,59 @@ which may expand to:
 function ⊗(dzdy::TensorDeriv, dydx::TensorDeriv)
     # can only multiply related derivatives, e.g. dz/dy * dy/dx
     @assert wrtname(dzdy) == varname(dydx)
-    # TODO: copy previous chains
-    chs = vcat(last_chain(dzdy), last_chain(dydx))
-    # TODO: add `dzdx = dzdy .* expr(dydx)`
-    # TODO: reindex above expressoion with guards
-    dzdx = TensorDeriv(variable(dzdy), wrtvariable(dydx), [chs])
+    # we expect that dydx is a one-element tensor derivative
+    @assert length(chains(dydx)) == 1 && length(last_chain(dydx)) == 1
+    chs = deepcopy(chains(dzdy))
+    dydx_tde = last_chain(dydx)[1]
+    new_tde_lhs = :($(variable(dzdy)) / $(wrtvariable(dydx)))
+    new_tde_rhs = :($(single_var(dzdy)) .* $(expr(dydx_tde)))
+    new_tde_ex = :($new_tde_lhs = $new_tde_rhs)  # TODO: simplify and reindex_with_guards?
+    new_tde = TensorDerivExpr(new_tde_ex)        # TODO: first reindex to match + reindex from start?
+    push!(chs[end], new_tde)
+    dzdx = TensorDeriv(variable(dzdy), wrtvariable(dydx), chs)
     return dzdx
-    
-    # dzdy, dydx = reindex_to_match(dzdy, dydx)
-    # # add pseudo one to enable accurate parsing later
-    # new_ex1 = with_pseudo_one(expr(dzdy), deriv_indices(dzdy))
-    # new_ex2 = with_pseudo_one(expr(dydx), deriv_indices(dydx))
-    # new_ex = simplify(new_ex1 ⊗ new_ex2)
-    # new_guards = vcat(dzdy.guards, dydx.guards)
-    # new_td = TensorDeriv(dzdy.dvar, dydx.wrt, new_ex, new_guards)
-    # return reindex_with_guards(new_td)
 end
 
-function tderiv_var(td::TensorDeriv)
-    name = Symbol(string(td.dvar.args[1]) * "_" * string(td.wrt.args[1]))
-    idxs = vcat(td.dvar.args[2:end], td.wrt.args[2:end])
-    return make_indexed(name, idxs)
-end
+# function tderiv_var(td::TensorDeriv)
+#     name = Symbol(string(td.dvar.args[1]) * "_" * string(td.wrt.args[1]))
+#     idxs = vcat(td.dvar.args[2:end], td.wrt.args[2:end])
+#     return make_indexed(name, idxs)
+# end
 
 
-"""Find indices on RHS of TensorDeriv which aren't present on LHS"""
-function free_indices(td::TensorDeriv)
-    lhs_idxs = vcat(td.dvar.args[2:end], td.wrt.args[2:end])
-    rhs_idxs = flatten(get_indices(expr(td)))
-    return setdiff(rhs_idxs, lhs_idxs)
-end
+# """Find indices on RHS of TensorDeriv which aren't present on LHS"""
+# function free_indices(td::TensorDeriv)
+#     lhs_idxs = vcat(td.dvar.args[2:end], td.wrt.args[2:end])
+#     rhs_idxs = flatten(get_indices(expr(td)))
+#     return setdiff(rhs_idxs, lhs_idxs)
+# end
 
 function ⊕(td1::TensorDeriv, td2::TensorDeriv)
-    @assert td1.dvar.args[1] == td2.dvar.args[1]
-    @assert td1.wrt.args[1] == td2.wrt.args[1]
-    dvar_idxs_st = Dict(zip(var_indices(td2), var_indices(td1)))
-    wrt_idxs_st = Dict(zip(wrt_indices(td2), wrt_indices(td1)))
-    st = merge(dvar_idxs_st, wrt_idxs_st)
-    free_idxs = free_indices(td2)
-    # TODO: should we also inclue all indicies of expr(td1)?
-    all_existing_idxs = Set{Symbol}(vcat(keys(st)..., values(st)..., free_idxs))
-    next_idx_pos = 1
-    for idx in free_idxs
-        if in(idx, values(st))
-            st[idx], next_idx_pos = next_index(all_existing_idxs, next_idx_pos)
-        end
-    end
-    wrt2_reindexed = subs(td2.wrt, st)
-    ex2_reindexed = subs(expr(td2), st)
-    guards2_reindexed = Expr[subs(g, st) for g in td2.guards]
-    new_ex = simplify(expr(td1) ⊕ ex2_reindexed)
-    new_guards = vcat(td1.guards, guards2_reindexed)
-    new_td = TensorDeriv(td1.dvar, wrt2_reindexed, new_ex, new_guards)
-    return reindex_with_guards(new_td)
+    @assert varname(td1) == varname(td2)
+    @assert wrtname(td1) == wrtname(td2)
+    chs = vcat(chains(td1), chains(td2))
+    return TensorDeriv(variable(td1), wrtvariable(td1), chs)
+    # TODO: reindex to match (siblings), reindex with guards, simplfy
+    
+    # dvar_idxs_st = Dict(zip(var_indices(td2), var_indices(td1)))
+    # wrt_idxs_st = Dict(zip(wrt_indices(td2), wrt_indices(td1)))
+    # st = merge(dvar_idxs_st, wrt_idxs_st)
+    # free_idxs = free_indices(td2)
+    # # TODO: should we also inclue all indicies of expr(td1)?
+    # all_existing_idxs = Set{Symbol}(vcat(keys(st)..., values(st)..., free_idxs))
+    # next_idx_pos = 1
+    # for idx in free_idxs
+    #     if in(idx, values(st))
+    #         st[idx], next_idx_pos = next_index(all_existing_idxs, next_idx_pos)
+    #     end
+    # end
+    # wrt2_reindexed = subs(td2.wrt, st)
+    # ex2_reindexed = subs(expr(td2), st)
+    # guards2_reindexed = Expr[subs(g, st) for g in td2.guards]
+    # new_ex = simplify(expr(td1) ⊕ ex2_reindexed)
+    # new_guards = vcat(td1.guards, guards2_reindexed)
+    # new_td = TensorDeriv(td1.dvar, wrt2_reindexed, new_ex, new_guards)
+    # return reindex_with_guards(new_td)
 end
 
 
@@ -425,9 +425,8 @@ function to_tensor_rule{T}(ew_rule::DiffRule, orig_idxs::Vector{Vector{T}}, idx:
     else
         tguards = Expr[]  # TODO: this should be covered by previous definition too
     end
-    # REFAC: indexed => make_indexed
-    tderiv = TensorDeriv(ensure_indexed(dvar, orig_idxs[1]),
-                         ensure_indexed(dwrt, wrt_idxs), tex, tguards)
+    tderiv = TensorDeriv(make_indexed(dvar, orig_idxs[1]),
+                         make_indexed(dwrt, wrt_idxs), tex, tguards)
     return TensorDiffRule(full_tpat, tderiv)
 end
 
