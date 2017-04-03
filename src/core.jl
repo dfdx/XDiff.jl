@@ -14,3 +14,11 @@ include("trules.jl")
 include("rdiff.jl")
 include("tdiff.jl")
 
+
+
+function main()
+    ex = :(y = sum(W * x))
+    inputs = [:W => rand(2,2), :x => rand(2)]
+    ctx = Dict()
+    dexs = rdiff(ex; ctx=ctx, inputs...)
+end

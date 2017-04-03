@@ -208,7 +208,7 @@ function reverse_pass(g::ExGraph, z::Symbol)
         dz = with_indices(dname(z), num_indices)
         dzwrt = with_indices(dname(z), num_indices+1, num_indices)
         guards = [:($ivar == $iwrt)
-                  for (ivar, iwrt) in zip(dz.args[2:end], dzwrt.args[2:end])]
+                  for (ivar, iwrt) in zip(split_indexed(dz)[2], split_indexed(dzwrt)[2])]
         g.ctx[:z_var] = z
         adj = Dict(z => TensorDeriv(dz, dzwrt, 1., guards))
     else

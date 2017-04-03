@@ -12,10 +12,17 @@ end
 function rev_step!(g::ExGraph, nd::ExNode{:(=)}, adj::Dict{Symbol, TensorDeriv})
     y = varname(nd)
     x = dependencies(nd)[1]
-    dzdx = deepcopy(adj[y])
-    wrtidxs = permute_indices(varidxs(nd), get_indices(expr(nd))[1])
+    dzdy = adj[y]
+    new_wrt_idxs = permute_indices(varidxs(nd), get_indices(expr(nd))[1])
+    new_wrt = make_indexed(dname(x), new_wrt_idxs)
+    new_last_tde = copy(last_tde(dzdy); wrt=new_wrt)
+    dzdx = deepcopy(dzdy)
+    dzdx.wrt = new_wrt
+    last_chain(dzdx)[end] = new_last_tde
+    # dzdx = deepcopy(adj[y])
+    # wrtidxs = permute_indices(varidxs(nd), get_indices(expr(nd))[1])
     # Q: should we subs indices in dzdx.ex? (assuming not)
-    dzdx.wrt.args = [dname(x), wrtidxs...]
+    # dzdx.wrt.args = [dname(x), wrtidxs...]
     adj[x] = dzdx
 end
 
@@ -37,7 +44,7 @@ function rev_step!(g::ExGraph, nd::ExNode{:call}, adj::Dict{Symbol, TensorDeriv}
     sizes = g.ctx[:sizes]
     for x in dependencies(nd)
         dydx = tderivative(iex, x)
-        dzdx = dzdy ⊗ dydx        
+        dzdx = dzdy ⊗ dydx
         if haskey(adj, x)
             adj[x] = adj[x] ⊕ dzdx
         else
@@ -57,25 +64,25 @@ function deriv_size(z_size::Expr, x_size::Expr)
     else
         # TODO: there should be a better representation of (z_size..., x_size...)
         return :($(z_size)..., $(x_size)...)
-        
+
     end
 end
 
 # other utils
 
 function to_expanded_expr(g::ExGraph, td::TensorDeriv)
-    ex = expr(td)
+    ex = to_expr(td)
     depv = collect_deps(g, ex)
     dep_exs = Expr[]
     for nd in g.tape
         if !isa(nd, ExNode{:input}) && varname(nd) in depv
-            # TODO: use expand_const_1(g, nd) ?
+            # should we use expand_const_1(g, nd) to expand constants in-place?
             push!(dep_exs, to_expr(nd))
         end
     end
-    result_var = single_var(td)
-    result_ex = :($result_var = $ex)
-    return to_block(dep_exs..., result_ex)
+    # result_var = single_var(td)
+    # result_ex = :($result_var = $ex)
+    return to_block(dep_exs..., ex)
 end
 
 

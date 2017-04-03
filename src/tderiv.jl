@@ -9,7 +9,7 @@ const TDIFF_VAR_NAMES = [:V, :W, :X, :Y]
 
 ## TensorDerivExpr - an atom of TensorDeriv
 
-struct TensorDerivExpr
+mutable struct TensorDerivExpr
     var::Union{Symbol,Expr}
     wrt::Union{Symbol,Expr}
     ex::Any
@@ -26,8 +26,8 @@ end
 
 
 function Base.copy(tde::TensorDerivExpr; var=variable(tde), wrt=wrtvariable(tde),
-                   ex=expr(tde), guards=guards(td))
-    return TensorDeriv(dvar, wrt, ex, guards)
+                   ex=expr(tde), guards=get_guards(tde))
+    return TensorDerivExpr(var, wrt, ex, guards)
 end
 
 
@@ -40,7 +40,7 @@ wrtname(tde::TensorDerivExpr) = split_indexed(wrtvariable(tde))[1]
 wrtidxs(tde::TensorDerivExpr) = split_indexed(wrtvariable(tde))[2]
 
 Espresso.expr(tde::TensorDerivExpr) = tde.ex
-Espresso.guards(tde::TensorDerivExpr) = tde.guards
+Espresso.get_guards(tde::TensorDerivExpr) = tde.guards
 
 
 # var_indices(td::TensorDeriv) = convert(Vector{Any}, td.dvar.args[2:end])
@@ -48,6 +48,13 @@ Espresso.guards(tde::TensorDerivExpr) = tde.guards
 # deriv_indices(td::TensorDeriv) = vcat(var_indices(td), wrt_indices(td))
 # all_indices(tde::TensorDerivExpr) = union(deriv_indices(td),
 #                                     flatten(Any, get_indices(expr(td))))
+
+function all_indices(tde::TensorDerivExpr)
+    return union(varidxs(tde),
+                 wrtidxs(tde),
+                 flatten(Any, get_indices(expr(tde))))
+end
+
 
 function single_var(tde::TensorDerivExpr)
     new_name = Symbol("$(varname(tde))_$(wrtname(tde))")
@@ -58,7 +65,7 @@ end
 
 function to_expr(tde::TensorDerivExpr)
     lhs = single_var(tde)
-    grds = guards(tde)
+    grds = get_guards(tde)
     rhs = !isempty(grds) > 0 ? Expr(:call, :*, expr(tde), grds...) : expr(tde)
     return :($lhs = $rhs)
 end
@@ -66,7 +73,7 @@ end
 
 function to_expr_pp(tde::TensorDerivExpr)
     lhs = :($(variable(tde)) / $(wrtvariable(tde)))
-    grds = guards(tde)
+    grds = get_guards(tde)
     rhs = !isempty(grds) > 0 ? Expr(:call, :*, expr(tde), grds...) : expr(tde)
     return :($lhs = $rhs)
 end
@@ -82,7 +89,7 @@ end
 
 const TDChain = Vector{TensorDerivExpr}
 
-struct TensorDeriv
+mutable struct TensorDeriv
     var::Union{Symbol,Expr}      # variable being differented, e.g. dz[i,j]
     wrt::Union{Symbol,Expr}      # variable w.r.t. which we differentiate, e.g. dx[m,n]
     chains::Vector{TDChain}      # derivative chains that make this tensor derivative
@@ -92,6 +99,12 @@ end
 function TensorDeriv(tde::TensorDerivExpr)
     chs = [[tde]]
     return TensorDeriv(variable(tde), wrtvariable(tde), chs)
+end
+
+function TensorDeriv(var::Union{Symbol,Expr}, wrt::Union{Symbol,Expr},
+                     ex::Any, grds::Vector{Expr})
+    tde = TensorDerivExpr(var, wrt, ex, grds)
+    return TensorDeriv(tde)
 end
 
 function TensorDeriv(ex::Expr)
@@ -109,6 +122,20 @@ wrtidxs(td::TensorDeriv) = split_indexed(wrtvariable(td))[2]
 
 chains(td::TensorDeriv) = td.chains
 last_chain(td::TensorDeriv) = td.chains[end]
+last_tde(td::TensorDeriv) = td.chains[end][end]
+
+is_simple(td::TensorDeriv) = length(chains(td)) == 1 && length(last_chain(td)) == 1
+
+
+function all_indices(td::TensorDeriv)
+    idxs = []
+    for ch in chains(td)
+        for tde in ch
+            append!(idxs, all_indices(tde))
+        end
+    end
+    return unique(idxs)
+end
 
 
 function single_var(td::TensorDeriv)
@@ -125,9 +152,11 @@ end
 
 
 function Base.show(io::IO, td::TensorDeriv)
-    chain_lengths = join(map(length, chains(td)), ",")
+    all_tdes = flatten(chains(td))
+    all_exs = map(to_expr_pp, all_tdes)
+    all_ex_str = join(all_exs, "; ")
     lhs = :($(variable(td)) / $(wrtvariable(td)))
-    print(io, "TensorDeriv($lhs | chains: $chain_lengths)")
+    print(io, "TensorDeriv($lhs || $all_ex_str)")
 end
 
 
@@ -149,7 +178,7 @@ function to_expr(td::TensorDeriv)
             # rename last var, adding its index to the name
             last_ex = block.args[end]
             svar, idxs = split_indexed(last_ex.args[1])
-            new_svar = Symbol("$(svar)_$(i)")
+            new_svar = Symbol("$(svar)__$(i)")
             last_ex.args[1] = make_indexed(new_svar, idxs)
             push!(sub_names, split_indexed(last_ex.args[1])[1])
         end
@@ -160,6 +189,16 @@ function to_expr(td::TensorDeriv)
         push!(block.args, :($td_svar = $sum_ex))
         return block
     end
+end
+
+
+"""
+If a tensor derivative consists of a single expression only,
+pretty print this expression. Otherwise throw an error.
+"""
+function to_expr_pp(td::TensorDeriv)
+    @assert is_simple(td) "Expected TensorDeriv with only one expression, got $td"
+    return to_expr_pp(last_chain(td)[1])
 end
 
 
@@ -231,20 +270,19 @@ end
 # with_pseudo_one(x, lhs_idxs) = x
 
 """
-Reindex second tensor derivative so that:
+Reindex second tensor derivative (dydx) so that:
 
-    * td2's var indices match td1's w.r.t. indices
-    * no other indices in td2 equal any indices in td1
+    * dydx's var indices match dzdy's w.r.t. indices
+    * no other indices in dydx equal any indices in dzdy
 """
 function reindex_to_match(dzdy::TensorDeriv, dydx::TensorDeriv)
     common_idxs_st = Dict(zip(varidxs(dydx), wrtidxs(dzdy)))
     other_idxs_st = index_replacements(Set(all_indices(dzdy)), all_indices(dydx))
     st = merge(other_idxs_st, common_idxs_st)
-    dydx_dvar = subs(dydx.dvar, st)
-    dydx_wrt = subs(dydx.wrt, st)
-    dydx_ex = subs(dydx.ex, st)
-    dydx_guards = Expr[subs(g, st) for g in dydx.guards]
-    new_dydx = TensorDeriv(dydx_dvar, dydx_wrt, dydx_ex, dydx_guards)
+    @assert length(last_chain(dydx)) == 1
+    dydx_tde = last_chain(dydx)[1]
+    new_dydx_ex = subs(to_expr_pp(dydx_tde), st) |> sanitize
+    new_dydx = TensorDeriv(new_dydx_ex)
     return dzdy, new_dydx
 end
 
@@ -266,12 +304,13 @@ function ⊗(dzdy::TensorDeriv, dydx::TensorDeriv)
     @assert wrtname(dzdy) == varname(dydx)
     # we expect that dydx is a one-element tensor derivative
     @assert length(chains(dydx)) == 1 && length(last_chain(dydx)) == 1
+    dzdy, dydx = reindex_to_match(dzdy, dydx)
     chs = deepcopy(chains(dzdy))
     dydx_tde = last_chain(dydx)[1]
     new_tde_lhs = :($(variable(dzdy)) / $(wrtvariable(dydx)))
-    new_tde_rhs = :($(single_var(dzdy)) .* $(expr(dydx_tde)))
-    new_tde_ex = :($new_tde_lhs = $new_tde_rhs)  # TODO: simplify and reindex_with_guards?
-    new_tde = TensorDerivExpr(new_tde_ex)        # TODO: first reindex to match + reindex from start?
+    new_tde_rhs = simplify(:($(single_var(dzdy)) .* $(expr(dydx_tde))))
+    new_tde_ex = :($new_tde_lhs = $new_tde_rhs)  # TODO: reindex_with_guards (needed?)
+    new_tde = TensorDerivExpr(new_tde_ex)
     push!(chs[end], new_tde)
     dzdx = TensorDeriv(variable(dzdy), wrtvariable(dydx), chs)
     return dzdx
@@ -296,8 +335,7 @@ function ⊕(td1::TensorDeriv, td2::TensorDeriv)
     @assert wrtname(td1) == wrtname(td2)
     chs = vcat(chains(td1), chains(td2))
     return TensorDeriv(variable(td1), wrtvariable(td1), chs)
-    # TODO: reindex to match (siblings), reindex with guards, simplfy
-    
+
     # dvar_idxs_st = Dict(zip(var_indices(td2), var_indices(td1)))
     # wrt_idxs_st = Dict(zip(wrt_indices(td2), wrt_indices(td1)))
     # st = merge(dvar_idxs_st, wrt_idxs_st)
@@ -330,7 +368,7 @@ immutable TensorDiffRule <: AbstractDiffRule
 end
 
 function Base.show(io::IO, rule::TensorDiffRule)
-    print(io, "TensorDiffRule($(rule.pat) ==> $(rule.deriv))")
+    print(io, "TensorDiffRule($(rule.pat) ==> $(to_expr(rule.deriv)))")
 end
 
 
@@ -368,21 +406,21 @@ end
 # end
 
 
-"""
-Ensures that its argument is an indexed expression:
+# """
+# Ensures that its argument is an indexed expression:
 
-    ensure_indexed(:x, [])          ==> :(x[])
-    ensure_indexed(:X, [:i])        ==> :(x[i])
-    ensure_indexed(:(x[k]), [:i])   ==> :(x[k])
-"""
-function ensure_indexed(ex::Expr, idxs::Vector)
-    @assert (ex.head == :ref) "Argument is not a symbol and not indexed already"
-    return ex
-end
+#     ensure_indexed(:x, [])          ==> :(x[])
+#     ensure_indexed(:X, [:i])        ==> :(x[i])
+#     ensure_indexed(:(x[k]), [:i])   ==> :(x[k])
+# """
+# function ensure_indexed(ex::Expr, idxs::Vector)
+#     @assert (ex.head == :ref) "Argument is not a symbol and not indexed already"
+#     return ex
+# end
 
-function ensure_indexed(var::Symbol, idxs::Vector)
-    return Expr(:ref, var, idxs...)
-end
+# function ensure_indexed(var::Symbol, idxs::Vector)
+#     return Expr(:ref, var, idxs...)
+# end
 
 
 """
@@ -425,8 +463,7 @@ function to_tensor_rule{T}(ew_rule::DiffRule, orig_idxs::Vector{Vector{T}}, idx:
     else
         tguards = Expr[]  # TODO: this should be covered by previous definition too
     end
-    tderiv = TensorDeriv(make_indexed(dvar, orig_idxs[1]),
-                         make_indexed(dwrt, wrt_idxs), tex, tguards)
+    tderiv = TensorDeriv(dvar, dwrt, tex, tguards)
     return TensorDiffRule(full_tpat, tderiv)
 end
 
@@ -448,8 +485,8 @@ function _tdiff_rule(ex, dex)
     dvar = dex.args[1].args[2]
     wrt = dex.args[1].args[3]
     deriv_ex = without_guards(sanitize(dex.args[2]))
-    guards = get_guards(dex)
-    deriv = TensorDeriv(dvar, wrt, deriv_ex, guards)
+    grds = get_guards(dex)
+    deriv = TensorDeriv(dvar, wrt, deriv_ex, grds)
     diff_var_name = Symbol(string(wrt.args[1])[2:end])
     var_names = [iex.args[1] for iex in ex.args[2].args[2:end]]
     deriv_idx = find(var_names .== diff_var_name)[1]
@@ -508,7 +545,7 @@ function tderivative(fullex::Expr, idx::Int)
     maybe_rule = tfind_rule(fullex, idx)
     if !isnull(maybe_rule)
         rule = get(maybe_rule)
-        unpacked_rule_dex = unpack_deriv(to_expr(rule.deriv))
+        unpacked_rule_dex = unpack_deriv(to_expr_pp(rule.deriv))
         unpacked_dex = rewrite(fullex, rule.pat, unpacked_rule_dex; phs=TDIFF_PHS)
         dex = pack_deriv(unpacked_dex)
         return TensorDeriv(dex)
