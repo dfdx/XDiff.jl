@@ -256,9 +256,11 @@ function rdiff(ex::Expr; ctx=Dict(), inputs...)
     if meth == :ein && !isindexed(ex)
         ex = to_einstein(ex; ctx=ctx, inputs...)
     end
-    g, adj = _rdiff(ex; ctx=ctx, inputs...)
+    g, adj = _rdiff(ex; ctx=ctx, inputs...)    
     vars = Set([var for (var, val) in inputs])
     dexs = Dict([(var, dex) for (var, dex) in adj if in(var, vars)])
+    # TODO: merge all dexs right here?
+    # TODO: extract all deps from sizes and include them in from_einstein
     outfmt = @get(ctx, :outfmt, :vec)
     outdexs = format_output(meth, outfmt, ctx, dexs, inputs)
     return outdexs

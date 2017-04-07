@@ -57,3 +57,9 @@ results = map(similar, input_tuple)
 
 # compare results
 @test isapprox(dvals[1], results[1])
+
+
+
+# TODO:
+# 1) find why :tmp995 is missing
+# 2) optimize common subexpressions

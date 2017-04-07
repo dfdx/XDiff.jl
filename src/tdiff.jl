@@ -51,7 +51,7 @@ function rev_step!(g::ExGraph, nd::ExNode{:call}, adj::Dict{Symbol, TensorDeriv}
             adj[x] = dzdx
         end
         if x != :I
-            dzdx_name = single_var(dzdx).args[1]
+            dzdx_name = split_indexed(single_var(dzdx))[1]
             sizes[dzdx_name] = deriv_size(sizes[g.ctx[:z_var]], sizes[x])
         end
     end

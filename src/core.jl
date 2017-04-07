@@ -17,8 +17,10 @@ include("tdiff.jl")
 
 
 function main()
-    ex = :(y = sum(W * x))
-    inputs = [:W => rand(2,2), :x => rand(2)]
+    ex = :(y = sum(W * x + b))
+    W, x, b = rand(3,4), rand(4), rand(3)
+    inputs = [:W => W, :x => x, :b => b]
     ctx = Dict()
     dexs = rdiff(ex; ctx=ctx, inputs...)
+    dexs[:W] |> eval
 end

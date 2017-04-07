@@ -17,10 +17,10 @@ mutable struct TensorDerivExpr
 end
 
 
-function TensorDerivExpr(dex::Expr)
+function TensorDerivExpr(dex::Expr; guards=nothing)
     var, wrt = dex.args[1].args[2:3]
     ex = without_guards(dex.args[2])
-    guards = get_guards(dex.args[2])
+    guards = guards != nothing ? guards : get_guards(dex.args[2])
     return TensorDerivExpr(var, wrt, ex, guards)
 end
 
@@ -185,7 +185,7 @@ function to_expr(td::TensorDeriv)
         td_svar = single_var(td)
         idxs = split_indexed(td_svar)[2]
         sub_vars = [make_indexed(name, idxs) for name in sub_names]
-        sum_ex = length(sub_vars) == 1 ? sub_vars[1] : Expr(:.+, sub_vars...)
+        sum_ex = length(sub_vars) == 1 ? sub_vars[1] : Expr(:call, :.+, sub_vars...)
         push!(block.args, :($td_svar = $sum_ex))
         return block
     end
@@ -255,6 +255,17 @@ end
 #     return copy(td; ex=new_ex, guards=new_guards)
 # end
 
+function reindex_with_guards(full_ex, guards::Vector{Expr})
+    @assert full_ex.head == :(=) && full_ex.args[1].args[1] == :/
+    def, ex = full_ex.args
+    anchors = Set(get_indices(def) |> flatten)
+    pairs = Tuple{Any,Any}[(grd.args[2], grd.args[3]) for grd in guards]
+    st, new_pairs = reduce_equalities(pairs, anchors)
+    new_guards = [:($i1 == $i2) for (i1, i2) in new_pairs]
+    new_ex = subs(ex, st)
+    return :($def = $new_ex), new_guards
+end
+
 
 # function with_pseudo_one{T}(ex::Expr, lhs_idxs::Vector{T})
 #     rhs_idxs = forall_indices(ex)
@@ -277,7 +288,8 @@ Reindex second tensor derivative (dydx) so that:
 """
 function reindex_to_match(dzdy::TensorDeriv, dydx::TensorDeriv)
     common_idxs_st = Dict(zip(varidxs(dydx), wrtidxs(dzdy)))
-    other_idxs_st = index_replacements(Set(all_indices(dzdy)), all_indices(dydx))
+    other_idxs_st = index_replacements(Set(dzdy |> last_tde |> all_indices),
+                                       dydx |> last_tde |> all_indices)
     st = merge(other_idxs_st, common_idxs_st)
     @assert length(last_chain(dydx)) == 1
     dydx_tde = last_chain(dydx)[1]
@@ -295,9 +307,9 @@ Example:
 
 which may expand to:
 
-    dz[]/dy[i] = v[i]
+    dz/dy[i] = v[i]
     dy[i]/dx[j] = w[i,j]
-    dz[]/dx[j] = v[i] .* w[i,j]
+    dz/dx[j] = v[i] .* w[i,j]
 """
 function ⊗(dzdy::TensorDeriv, dydx::TensorDeriv)
     # can only multiply related derivatives, e.g. dz/dy * dy/dx
@@ -307,10 +319,12 @@ function ⊗(dzdy::TensorDeriv, dydx::TensorDeriv)
     dzdy, dydx = reindex_to_match(dzdy, dydx)
     chs = deepcopy(chains(dzdy))
     dydx_tde = last_chain(dydx)[1]
+    guards = vcat(dzdy |> last_tde |> get_guards, dydx_tde |> get_guards)
     new_tde_lhs = :($(variable(dzdy)) / $(wrtvariable(dydx)))
     new_tde_rhs = simplify(:($(single_var(dzdy)) .* $(expr(dydx_tde))))
-    new_tde_ex = :($new_tde_lhs = $new_tde_rhs)  # TODO: reindex_with_guards (needed?)
-    new_tde = TensorDerivExpr(new_tde_ex)
+    new_tde_ex_no_guards = :($new_tde_lhs = $new_tde_rhs)
+    new_tde_ex, new_guards = reindex_with_guards(new_tde_ex_no_guards, guards)
+    new_tde = TensorDerivExpr(new_tde_ex; guards=new_guards)
     push!(chs[end], new_tde)
     dzdx = TensorDeriv(variable(dzdy), wrtvariable(dydx), chs)
     return dzdx
@@ -524,7 +538,7 @@ undname(dvar::Symbol) = Symbol(string(dvar)[2:end])
 function unpack_deriv(ex::Expr)
     @assert ex.head == :(=)
     @assert ex.args[1].head == :call && ex.args[1].args[1] == :/
-    dvar, dwrt = [dv.args[1] for dv in ex.args[1].args[2:3]]
+    dvar, dwrt = [split_indexed(dv)[1] for dv in ex.args[1].args[2:3]]
     var, wrt = undname(dvar), undname(dwrt)
     return subs(ex, Dict(dvar => var, dwrt => wrt))
 end
@@ -533,7 +547,7 @@ end
 function pack_deriv(ex::Expr)
     @assert ex.head == :(=)
     @assert ex.args[1].head == :call && ex.args[1].args[1] == :/
-    var, wrt = [v.args[1] for v in ex.args[1].args[2:3]]
+    var, wrt = [split_indexed(v)[1] for v in ex.args[1].args[2:3]]
     dvar, dwrt = dname(var), dname(wrt)
     lhs = subs(ex.args[1], Dict(var => dvar, wrt => dwrt))
     rhs = ex.args[2]
