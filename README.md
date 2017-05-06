@@ -49,7 +49,7 @@ dexs[:W]   # ==> :(dz_dW[i,m,n] = x[n] * (i == m))
 ### Limitations
 
  * loops are not supported
- * conditional branching is supported
+ * conditional branching is not supported
 
 Loops and conditional operators may introduce discontinuity points, potentially resulting in
 very complex and heavy piecewise expressions, and thus are not supported.
