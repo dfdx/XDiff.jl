@@ -30,7 +30,7 @@ Create a TensorDeriv from an expression. E.g. in:
 function TensorDeriv(g::EinGraph, dex::Expr; guards=nothing)
     full_vname, idxs = split_indexed(dex.args[1])
     vname, wrtname_ = Symbol.(split(String(full_vname), "_"))
-    var_idx_len = g[undname(vname)].val |> size |> length    
+    var_idx_len = g[undname(vname)].val |> size |> length
     vidxs, wrtidxs_ = idxs[1:var_idx_len], idxs[var_idx_len+1:end]
     var, wrt = make_indexed(vname, vidxs), make_indexed(wrtname_, wrtidxs_)
     ex = without_guards(dex.args[2])
@@ -94,9 +94,12 @@ end
 
 function to_expr(td::TensorDeriv)
     lhs = single_var(td)
+    lhs_idxs = get_indices(lhs)
     grds = getguards(td)
-    rhs = !isempty(grds) > 0 ? Expr(:call, :*, getexpr(td), grds...) : getexpr(td)
-    return :($lhs = $rhs)
+    rhs = getexpr(td)
+    rhs_idxs = get_indices(rhs)
+    # TODO: check if it works for blocks too
+    return Espresso.apply_guards(:($lhs = $rhs),  grds)
 end
 
 
@@ -199,14 +202,14 @@ end
 # """
 function ⊗(dzdy::TensorDeriv, dydx::TensorDeriv)
     # can only multiply related derivatives, e.g. dz/dy * dy/dx
-    @assert wrtname(dzdy) == varname(dydx)    
-    dzdy, dydx = reindex_to_match(dzdy, dydx)    
+    @assert wrtname(dzdy) == varname(dydx)
+    dzdy, dydx = reindex_to_match(dzdy, dydx)
     guards = vcat(getguards(dzdy), getguards(dydx))
     new_td_lhs = :($(getvar(dzdy)) / $(getwrtvar(dydx)))
     new_td_rhs = :($(single_var(dzdy)) .* $(getexpr(dydx))) |> simplify
     new_td_ex_no_guards = :($new_td_lhs = $new_td_rhs)
     new_td_ex, new_guards = reindex_with_guards(new_td_ex_no_guards, guards)
-    new_td = TensorDeriv(new_td_ex; guards=new_guards)    
+    new_td = TensorDeriv(new_td_ex; guards=new_guards)
     dzdx = TensorDeriv(new_td)
     return dzdx
 end
@@ -379,6 +382,9 @@ function pack_deriv(ex::Expr)
 end
 
 
+"""
+Derivative of a primitive expression in Einstein notation.
+"""
 function tderivative(fullex::Expr, idx::Int)
     maybe_rule = tfind_rule(fullex, idx)
     if !isnull(maybe_rule)

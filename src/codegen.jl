@@ -8,7 +8,7 @@ end
 
 function generate_code(::VectorCodeGen, g::ExGraph, out_vars::Vector{Symbol})
     ex = to_expr(g)
-    push!(ex.args, Expr(:tuple, out_vars...))
+    # push!(ex.args, Expr(:tuple, out_vars...))
     # ex = remove_unused(ex; output_vars=out_vars)
     return ex
 end
@@ -16,7 +16,7 @@ end
 
 function generate_code(::VectorCodeGen, g::EinGraph, out_vars::Vector{Symbol})
     ex = from_einstein(g)
-    push!(ex.args, Expr(:tuple, out_vars...))
+    # push!(ex.args, Expr(:tuple, out_vars...))
     # ex = remove_unused(ex; output_vars=out_vars)
     return ex
 end

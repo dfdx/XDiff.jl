@@ -32,6 +32,8 @@ function main()
 end
 
 
+myexp(x) = begin y = exp(x) end
+
 
 
 # autoencoder cost: sum of squared errors
@@ -149,7 +151,8 @@ end
 
 
 function main_cw()
-    ex = :(y[i] = exp(x[i]))
+    
+    ex = :(z = myexp.(x) + 1)
     ctx = Dict(:codegen => EinCodeGen())
     inputs = [:x => rand(2)]
     dex = rdiff(ex; ctx=ctx, inputs...)

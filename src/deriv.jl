@@ -47,7 +47,7 @@ macro diff_rule(ex::Expr, idx::Int, dex::Any)
     canonical_ex = Expr(:call, op, new_args...)
     # canonical_ex = canonical_calls(current_module(), ex)
     canonical_dex = canonical_calls(current_module(), dex)
-    DIFF_RULES[(op, types, idx)] = DiffRule(canonical_ex, canonical_dex)    
+    DIFF_RULES[(op, types, idx)] = DiffRule(canonical_ex, canonical_dex)
 end
 
 
@@ -96,6 +96,23 @@ end
 
 
 """
+Add to all intermediate variables a prefix of a function name to avoid name conflicts
+"""
+function with_opname_prefix(ex::Expr, fname::OpName)
+    @assert ex.head == :block
+    prefix = isa(fname, Symbol) ? "__$(fname)_" : "__$(fname.args[1])_$(fname.args[2].value)_"
+    st = Dict()
+    for subex in ex.args
+        if subex.head == :(=)
+            vname = split_indexed(subex.args[1])[1]
+            st[vname] = Symbol("$(prefix)_$(vname)")
+        end
+    end
+    return subs(ex, st)
+end
+
+
+"""
 Register new differentiation rule for function `fname` with arguments
 of `types` at index `idx`, return this new rule.
 """
@@ -105,9 +122,11 @@ function register_rule(fname::OpName, types::Vector{DataType}, idx::Int)
     args, ex = funexpr(f, (types...))
     # ex = sanitize(ex)
     xs = [(arg, ones(T)[1]) for (arg, T) in zip(args, types)]
-    dex = rdiff(ex; xs...) |> without_output_tuple
+    dex = rdiff(ex; xs...)
+    prefixed_dex = with_opname_prefix(remove_unused(dex), fname)
+    pure_dex = without_output_tuple(prefixed_dex)
     fex = Expr(:call, fname, args...)
-    new_rule = DiffRule(fex, dex)
+    new_rule = DiffRule(fex, pure_dex)
     DIFF_RULES[(fname, types, idx)] = new_rule
     return new_rule
 end
@@ -120,7 +139,7 @@ function derivative(pex::Expr, types::Vector{DataType}, idx::Int;
     op = canonical(mod, pex.args[1])
     maybe_rule = find_rule(op, types, idx)
     rule = !isnull(maybe_rule) ? get(maybe_rule) : register_rule(op, types, idx)
-    return apply_rule(rule, pex)
+    return apply_rule(rule, pex) |> sanitize
 end
 
 derivative(var::Symbol, types::Vector{DataType}, idx::Int) = 1

@@ -300,7 +300,7 @@ variabels. Example:
 """
 function rdiff(ex::Expr; ctx=Dict(), inputs...)
     ctx = to_context(ctx)
-    # decide on a format: if any of arguments is a tensor, use Einstein notation
+    # determine format: if any of arguments is a tensor, use Einstein notation
     # otherwise use simple scalar differentiation
     if isindexed(ex)
         g = EinGraph(ex; ctx=ctx, inputs...)
@@ -313,8 +313,10 @@ function rdiff(ex::Expr; ctx=Dict(), inputs...)
     dg = _rdiff(g)
     cg = cat(g, dg)
     propagate_deriv_size!(cg)
-    outvars = [deriv_name(g.ctx[:z_var], var) for (var, _) in inputs]
-    outg = topsort(cg, outvars)
+    propagate_size!(cg)
+    outvars = unshift!([deriv_name(g.ctx[:z_var], var) for (var, _) in inputs], varname(g[end]))
+    outg = topsort(cg)
+    push!(outg, :tuple, Espresso.genname(), Expr(:tuple, outvars...))
     codegen = @get(ctx, :codegen, VectorCodeGen())
     out = generate_code(codegen, outg, outvars)
     return out

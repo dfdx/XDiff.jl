@@ -122,14 +122,8 @@ function make_dzdz_expr(z::Symbol, z_idxs::Vector)
     vidxs = vcat(z_idxs, wrt_idxs)
     var = make_indexed(vname, vidxs)
     guards = Expr[:($i == $j) for (i,j) in zip(z_idxs, wrt_idxs)]
-    if isempty(guards)
-        return :($var = 1.0)
-    elseif length(guards) == 1
-        return :($var = 1.0 * $(guards[1]))
-    else
-        guard_subex = Expr(:call, :*, guards...)
-        return :($dzdz_var = 1.0 * $guard_subex)
-    end
+    ex = with_guards(1.0, guards)
+    return :($var = $ex)
 end
 
 
