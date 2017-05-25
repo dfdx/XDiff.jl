@@ -21,7 +21,7 @@ function extend_deriv!(dg::EinGraph, dzdx::TensorDeriv)
         parse!(sub_dg, :($var_1 = $ex_1))
         parse!(sub_dg, :($var_2 = $ex_2))
         parse!(sub_dg, :($var = $var_1 .+ $var_2))
-        sub_dg = fuse_equal(sub_dg)
+        sub_dg = fuse_assigned(sub_dg)
         new_nodes = sub_dg.tape
     else
         # dg already contains subderivatives for dzdx_v
@@ -32,7 +32,7 @@ function extend_deriv!(dg::EinGraph, dzdx::TensorDeriv)
         sub_dg = EinGraph()
         parse!(sub_dg, :($new_var = $new_ex))
         parse!(sub_dg, :($var = $prev_ex .+ $new_var))
-        sub_dg = fuse_equal(sub_dg)
+        sub_dg = fuse_assigned(sub_dg)
         new_nodes = sub_dg.tape
     end
     delete!(dg, pos)
@@ -137,5 +137,5 @@ function reverse_pass!(g::EinGraph)
         rev_step!(g, dg, nd)
     end
     outvars = [deriv_name(z, varname(nd)) for nd in g.tape if isa(nd, ExNode{:input})]
-    return fuse_equal(dg; outvars=outvars)
+    return fuse_assigned(dg; outvars=outvars)
 end

@@ -1,4 +1,5 @@
 
+# TODO: totally outdated, either remove or renew
 ex = :(z = x1*x2 + sin(x1))
 @test (rdiff(ex; x1=1, x2=1) == Dict(:x1 => :(cos(x1) .+ x2), :x2 => :x1))
     

@@ -6,6 +6,9 @@ Unlike automatic differentiation packages, XDiff.jl can output not only ready-to
 derivative functions, but also their symbolic expressions suitable for
 further optimization and code generation. Here's an example:
 
+> TODO: this description is quite outdated, the details may differ a lot
+
+
 ```julia
 function ann(w1, w2, w3, x1)
     _x2 = w1 * x1
@@ -23,7 +26,7 @@ types = (Matrix{Float64}, Matrix{Float64}, Matrix{Float64}, Vector{Float64})
 w1, w2, w3, x1 = randn(10,10), randn(10,10), randn(1,10), randn(10)
 
 # create a dict of symbolic derivatives
-dexs = rdiff(ann, types)
+dexs = xdiff(ann, types)
 dexs[:w1]   # ==> quote ... end
 
 # create derivative functions
@@ -35,14 +38,14 @@ Another unique feature of XDiff.jl is that it can generate expressions not only 
 but also functions R^n -> R^m using Einstein indexing notation:
 
 ```julia
-# by default, rdiff tries to generate vectorized output
+# by default, xdiff tries to generate vectorized output
 # we can make it return expressions in Einstein notation using :outfmt option
 ctx = [:outfmt => :ein]
 
 # when differtiating an expression, we need to provide "example values",
 # i.e. anything that has the same type and number of dimensions as we expect
 # from real values
-dexs = rdiff(:(z = W*x + b); ctx=ctx, W=rand(3,4), x=rand(4), b=rand(3))
+dexs = xdiff(:(z = W*x + b); ctx=ctx, W=rand(3,4), x=rand(4), b=rand(3))
 dexs[:W]   # ==> :(dz_dW[i,m,n] = x[n] * (i == m))
 ```
 

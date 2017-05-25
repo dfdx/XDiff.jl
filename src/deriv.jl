@@ -122,7 +122,7 @@ function register_rule(fname::OpName, types::Vector{DataType}, idx::Int)
     args, ex = funexpr(f, (types...))
     # ex = sanitize(ex)
     xs = [(arg, ones(T)[1]) for (arg, T) in zip(args, types)]
-    dex = rdiff(ex; xs...)
+    dex = xdiff(ex; xs...)
     prefixed_dex = with_opname_prefix(remove_unused(dex), fname)
     pure_dex = without_output_tuple(prefixed_dex)
     fex = Expr(:call, fname, args...)

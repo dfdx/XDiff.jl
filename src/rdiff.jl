@@ -144,7 +144,7 @@ function extend_deriv!(dg::ExGraph, dzdx_v::Symbol, dzdx::Any)
         parse!(sub_dg, :($dzdx_v_1 = $dzdx_ex_1))
         parse!(sub_dg, :($dzdx_v_2 = $dzdx_ex_2))
         parse!(sub_dg, :($dzdx_v = $dzdx_v_1 .+ $dzdx_v_2))
-        sub_dg = fuse_equal(sub_dg)
+        sub_dg = fuse_assigned(sub_dg)
         new_nodes = sub_dg.tape
     else
         # dg already contains subderivatives for dzdx_v
@@ -154,7 +154,7 @@ function extend_deriv!(dg::ExGraph, dzdx_v::Symbol, dzdx::Any)
         sub_dg = typeof(dg)()
         parse!(sub_dg, :($dzdx_v_last = $dzdx))
         parse!(sub_dg, :($dzdx_v = $prev_dzdx_ex .+ $dzdx_v_last))
-        sub_dg = fuse_equal(sub_dg)
+        sub_dg = fuse_assigned(sub_dg)
         new_nodes = sub_dg.tape
     end
     delete!(dg, pos)
@@ -267,38 +267,47 @@ function reverse_pass!(g::ExGraph)
         rev_step!(g, dg, nd)
     end
     outvars = [deriv_name(z, varname(nd)) for nd in g.tape if isa(nd, ExNode{:input})]
-    return fuse_equal(dg; outvars=outvars)
+    return fuse_assigned(dg; outvars=outvars)
 end
 
 
-function _rdiff(g::AbstractExGraph)
+function _xdiff(g::AbstractExGraph)
     forward_pass!(g)
     dg = reverse_pass!(g)
     return dg
 end
 
 
-# function _rdiff(ex::Expr; ctx=Dict(), inputs...)
+# function _xdiff(ex::Expr; ctx=Dict(), inputs...)
 #     g = isindexed(ex) ? EinGraph(ex; ctx=ctx, inputs...) : ExGraph(ex; ctx=ctx, inputs...)
-#     return g, _rdiff(g)
+#     return g, _xdiff(g)
 # end
 
 
 
 """
-rdiff(ex::Expr; ctx=Dict(), xs...)
+xdiff(ex::Expr; ctx=Dict(), inputs...)
 
 Differentiate expression `ex` w.r.t. variables `inputs`. `inputs` should be a list
 of key-value pairs with keys representing variables in expression and values
-representing 'example values' (used e.g. for type inference). Returns an array
-of symbolic expressions representing derivatives of ex w.r.t. each of passed
-variabels. Example:
+representing 'example values' (used e.g. for type inference). Returns an expression
+that calculates original value and derivatives of all inputs. Example:
 
-    rdiff(:(x^n), x=1, n=1)
-    # TODO
+    xdiff(:(x^n); x=1, n=1)
+    # quote
+    #   tmp704 = 1
+    #   tmp708 = log(x)
+    #   tmp705 = n - tmp704
+    #   tmp706 = x .^ tmp705
+    #   tmp702 = x ^ n
+    #   dtmp702_dx = n * tmp706
+    #   tmp709 = x .^ n
+    #   dtmp702_dn = tmp708 * tmp709
+    #   tmp711 = (tmp702, dtmp702_dx, dtmp702_dn)
+    # end
 
 """
-function rdiff(ex::Expr; ctx=Dict(), inputs...)
+function xdiff(ex::Expr; ctx=Dict(), inputs...)
     ctx = to_context(ctx)
     # determine format: if any of arguments is a tensor, use Einstein notation
     # otherwise use simple scalar differentiation
@@ -310,7 +319,7 @@ function rdiff(ex::Expr; ctx=Dict(), inputs...)
     else
         g = ExGraph(ex; ctx=ctx, inputs...)
     end
-    dg = _rdiff(g)
+    dg = _xdiff(g)
     cg = cat(g, dg)
     propagate_deriv_size!(cg)
     propagate_size!(cg)
@@ -323,24 +332,23 @@ function rdiff(ex::Expr; ctx=Dict(), inputs...)
 end
 
 
+"""
+fdiff(f::Function; ctx=Dict(), xs...)
 
-# """
-# fdiff(f::Function; ctx=Dict(), xs...)
+Differentiate function `f` w.r.t. its arguments and return tuple of derivative
+function, one per argument.
 
-# Differentiate function `f` w.r.t. its arguments and return tuple of derivative
-# function, one per argument.
-
-# See also `rdiff()`.
-# """
-# function fdiff{N}(f::Function, types::NTuple{N,DataType}; ctx=Dict())
-#     args, _ = funexpr(f, types)
-#     dexs = rdiff(f, types; ctx=ctx)
-#     mod = ctx[:mod]
-#     typed_args = [Expr(:(::), x, t) for (x, t) in zip(args, types)]
-#     header = Expr(:tuple, typed_args...)
-#     dex_arr = [dexs[arg] for arg in args]
-#     merged_dex = mergeex(dex_arr...)
-#     fn_ex = Expr(:->, header, merged_dex)
-#     fn = eval(mod, fn_ex)
-#     return fn
-# end
+See also `xdiff()`.
+"""
+function fdiff{N}(f::Function, types::NTuple{N,DataType}; ctx=Dict())
+    args, ex = funexpr(f, types)
+    ex = sanitize(ex)
+    inputs = [arg => example_val(t) for (arg, t) in zip(args, types)]
+    dex = xdiff(ex; ctx=ctx, inputs...)
+    mod = ctx[:mod]
+    typed_args = [Expr(:(::), x, t) for (x, t) in zip(args, types)]
+    header = Expr(:tuple, typed_args...)
+    fn_ex = Expr(:->, header, dex)
+    fn = eval(mod, fn_ex)
+    return fn
+end

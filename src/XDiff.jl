@@ -3,8 +3,8 @@ __precompile__()
 
 module XDiff
 
-export _rdiff,
-       rdiff,
+export _xdiff,
+       xdiff,
        fdiff,
        @diff_rule
 
