@@ -6,8 +6,6 @@ Unlike automatic differentiation packages, XDiff.jl can output not only ready-to
 derivative functions, but also their symbolic expressions suitable for
 further optimization and code generation. Here's an example:
 
-> TODO: this description is quite outdated, the details may differ a lot
-
 
 ```julia
 function ann(w1, w2, w3, x1)

@@ -95,11 +95,11 @@ end
 function to_expr(td::TensorDeriv)
     lhs = single_var(td)
     lhs_idxs = get_indices(lhs)
-    grds = getguards(td)
+    guards = getguards(td)
     rhs = getexpr(td)
     rhs_idxs = get_indices(rhs)
     # TODO: check if it works for blocks too
-    return Espresso.apply_guards(:($lhs = $rhs),  grds)
+    return Espresso.apply_guards(:($lhs = $rhs),  guards)
 end
 
 

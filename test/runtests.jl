@@ -6,7 +6,6 @@ using Base.Test
 
 macro rdcmp(f, params...)    
     inputs = [param.args[1] => eval(param.args[2]) for param in params]
-    # println(inputs)
     ret = Expr(:let, Expr(:block))    
     body = quote
         # inputs = $([inp.args[1] => inp.args[2] for inp in _inputs])
@@ -14,9 +13,11 @@ macro rdcmp(f, params...)
         types = ([typeof(inp[2]) for inp in $inputs]...)        
         df = fdiff($f, types)
         dvals = df(vals...)
+        dvals_a = [dvals...]
 
         rd_dvals = ReverseDiff.gradient($f, (vals...,))
-        @test dvals[2:end] == rd_dvals
+        rd_dvals_a = [rd_dvals...]
+        @test isapprox(dvals_a[2:end], rd_dvals_a)
     end
     for arg in body.args
         push!(ret.args[1].args, arg)
@@ -26,5 +27,6 @@ end
 
 
 
-# include("rdiff_test.jl")
-# include("autoencoder_reversediff.jl")
+include("linreg.jl")
+include("ann.jl")
+include("autoencoder.jl")

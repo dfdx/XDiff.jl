@@ -101,8 +101,7 @@ function rev_step!(g::EinGraph, dg::EinGraph, nd::ExNode{:call})
             # don't clog dg with unnesessary derivs
             continue
         end
-        dydx = tderivative(iex, x)
-        # dzdy, dydx = reindex_to_match(dzdy, dydx)
+        dydx = tderivative(iex, x)        
         dzdx = dzdy ⊗ dydx
         dzdx = expand_const(cg, dzdx) |> simplify
         dzdx_vname = split_indexed(single_var(dzdx))[1]

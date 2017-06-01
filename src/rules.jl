@@ -123,7 +123,8 @@
 
 # abs
 
-@diff_rule abs(x::Number) 1 (sign(x) * x)
+@diff_rule abs(x::Number) 1 (sign(x) .* x)
+@diff_rule abs2(x::Number) 1 (2 .* abs(x) .* sign(x) .* x)
 # @diff_rule abs(x::AbstractArray) 1 (sign(x) .* x)
 
 # min, max
