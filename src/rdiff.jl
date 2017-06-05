@@ -129,13 +129,57 @@
 #
 
 
+## utils
+
+function extend_deriv!(dg::ExGraph, dzdx_v::Symbol, dzdx::Any)
+    subderivs = find_related(dg, dzdx_v)
+    pos = indexof(dg, dzdx_v)
+    if isempty(subderivs)
+        # first split
+        dzdx_ex_1 = getexpr(dg[dzdx_v])
+        dzdx_ex_2 = dzdx
+        dzdx_v_1 = Symbol("$(dzdx_v)__1")
+        dzdx_v_2 = Symbol("$(dzdx_v)__2")
+        sub_dg = typeof(dg)()
+        parse!(sub_dg, :($dzdx_v_1 = $dzdx_ex_1))
+        parse!(sub_dg, :($dzdx_v_2 = $dzdx_ex_2))
+        parse!(sub_dg, :($dzdx_v = $dzdx_v_1 .+ $dzdx_v_2))
+        sub_dg = fuse_assigned(sub_dg)
+        new_nodes = sub_dg.tape
+    else
+        # dg already contains subderivatives for dzdx_v
+        last_idx = parse(Int, split(subderivs[end] |> String, "__")[end])
+        dzdx_v_last = Symbol("$(dzdx_v)__$(last_idx + 1)")
+        prev_dzdx_ex = getexpr(dg[dzdx_v])
+        sub_dg = typeof(dg)()
+        parse!(sub_dg, :($dzdx_v_last = $dzdx))
+        parse!(sub_dg, :($dzdx_v = $prev_dzdx_ex .+ $dzdx_v_last))
+        sub_dg = fuse_assigned(sub_dg)
+        new_nodes = sub_dg.tape
+    end
+    delete!(dg, pos)
+    insert!(dg, pos, new_nodes)
+    return dg
+end
+
+
+function example_val{T}(::Type{T})
+    if T <: Number
+        return one(T)
+    elseif T <: Array
+        return ones(eltype(T), [1 for i=1:ndims(T)]...)
+    else
+        error("Don't know how to create an example value for type $T")
+    end
+end
+
 
 
 ## forward pass
 
 """Forward pass of differentiation"""
-function forward_pass(g::ExGraph)
-    evaluate!(g, g.tape[end].var)
+function forward_pass!(g::AbstractExGraph)
+    evaluate!(g, varname(g.tape[end]))
     propagate_size!(g)
     return g
 end
@@ -147,155 +191,144 @@ end
 Perform one step of reverse pass. Add derivatives of output variable w.r.t.
 node's dependenices to adjoint dictionary.
 """
-function rev_step!(g::ExGraph, nd::ExNode{:(=)}, adj::Dict{Symbol,Deriv})
-    y = nd.var
+function rev_step!(g::ExGraph, dg::ExGraph, nd::ExNode{:(=)})
+    y = varname(nd)
     x = dependencies(nd)[1]
     adj[x] = adj[y]
 end
 
-function rev_step!(g::ExGraph, nd::ExNode{:constant}, adj::Dict{Symbol,Deriv})
-    adj[nd.var] = Deriv(0.)
-end
 
-function rev_step!(g::ExGraph, nd::ExNode{:input}, adj::Dict{Symbol,Deriv})
+function rev_step!(g::ExGraph, dg::ExGraph, nd::ExNode{:constant})
     # do nothing
 end
 
-function rev_step!(g::ExGraph, nd::ExNode{:call}, adj::Dict{Symbol,Deriv})
-    y = nd.var
-    types = [typeof(g.idx[x].val) for x in dependencies(nd)]
+
+function rev_step!(g::ExGraph, dg::ExGraph, nd::ExNode{:input})
+    # do nothing
+end
+
+
+function rev_step!(g::ExGraph, dg::ExGraph, nd::ExNode{:call})
+    y = varname(nd)
+    z = g.ctx[:z_var]
+    dzdy_v = deriv_name(z, y)
+    cg = cat(g, dg)
+    types = [typeof(getvalue(g[x])) for x in dependencies(nd)]
     for (i, x) in enumerate(dependencies(nd))
         xnd = g[x]
-        dydx = derivative(expr(nd), types, i, mod=g.ctx[:mod])
-        dzdy = adj[y]
-        a = dzdy ⊗ dydx
-        if haskey(adj, x)
-            adj[x] = adj[x] ⊕ a
+        if isa(xnd, ExNode{:constant})
+            # don't clog dg with unnesessary derivs
+            continue
+        end
+        dydx = derivative(getexpr(nd), types, i, mod=g.ctx[:mod])
+        dzdx = dzdy_v ⊗ dydx
+        dzdx = expand_const(cg, dzdx) |> simplify
+        dzdx_v = deriv_name(z, x)
+        if haskey(dg, dzdx_v)
+            extend_deriv!(dg, dzdx_v, dzdx)
         else
-            adj[x] = a
+            parse!(dg, :($dzdx_v = $dzdx))
         end
     end
 end
 
 
-## reverse pass
-
-function expand_adjoints(g::ExGraph, adj::Dict{Symbol, Deriv})
-    return Dict([(var, simplify(expand_temp(g, expr(d)))) for (var, d) in adj])
+function rev_step!(g::ExGraph, dg::ExGraph, nd::ExNode{:bcast})
+    y = varname(nd)
+    z = g.ctx[:z_var]
+    dzdy_v = deriv_name(z, y)
+    cg = cat(g, dg)
+    types = [typeof(getvalue(g[x])) for x in dependencies(nd)]
+    for (i, x) in enumerate(dependencies(nd))
+        xnd = g[x]
+        if isa(xnd, ExNode{:constant})
+            # don't clog dg with unnesessary derivs
+            continue
+        end
+        dydx = derivative(getexpr(nd) |> bcast_to_call, types, i, mod=g.ctx[:mod])
+        dzdx = dzdy_v ⊗ dydx
+        dzdx = expand_const(cg, dzdx) |> simplify
+        dzdx_v = deriv_name(z, x)
+        if haskey(dg, dzdx_v)
+            extend_deriv!(dg, dzdx_v, dzdx)
+        else
+            parse!(dg, :($dzdx_v = $dzdx))
+        end
+    end
 end
 
 
-"""Reverse pass of differentiation"""
-function reverse_pass(g::ExGraph, z::Symbol)
-    if any(isindexed, g.tape)
-        num_indices = ndims(g[z].val)
-        dz = with_indices(dname(z), num_indices)
-        dzwrt = with_indices(dname(z), num_indices+1, num_indices)
-        guards = [:($ivar == $iwrt)
-                  for (ivar, iwrt) in zip(dz.args[2:end], dzwrt.args[2:end])]
-        g.ctx[:z_var] = z
-        adj = Dict(z => TensorDeriv(dz, dzwrt, 1., guards))
-    else
-        adj = Dict(z => Deriv(1.))
-    end
+function reverse_pass!(g::ExGraph)
+    z = varname(g.tape[end])
+    g.ctx[:z_var] = z
+    dzdz_var = deriv_name(z, z)
+    dg = ExGraph(:($dzdz_var = 1.0))
     for nd in reverse(g.tape)
-        rev_step!(g, nd, adj)
+        rev_step!(g, dg, nd)
     end
-    return adj
+    outvars = [deriv_name(z, varname(nd)) for nd in g.tape if isa(nd, ExNode{:input})]
+    return fuse_assigned(dg; outvars=outvars)
 end
 
 
-function _rdiff(ex::Expr; ctx=Dict(), inputs...)
-    ctx = to_context(ctx)
-    g = ExGraph(ex; ctx=ctx, inputs...)
-    forward_pass(g)
-    z = g.tape[end].var
-    adj = reverse_pass(g, z)
-    return g, expand_adjoints(g, adj)
+function _xdiff(g::AbstractExGraph)
+    forward_pass!(g)
+    dg = reverse_pass!(g)
+    return dg
 end
 
 
-function format_output(meth, outfmt, ctx, dexs, inputs)
-    if outfmt == :vec && meth == :ein
-        res = Dict()
-        for (var, dex) in dexs
-            res[var] = from_einstein(dex; ctx=ctx, inputs...)
-            # try
-                
-            # catch
-            #     res[var] = to_einsum(dex)  # fallback
-            # end
-        end
-        return res
-    elseif outfmt == :einsum
-        res = Dict()
-        for (var, dex) in dexs
-            res[var] = to_einsum(dex)
-        end
-        return res
-    else
-        dexs
-    end
-end
+# function _xdiff(ex::Expr; ctx=Dict(), inputs...)
+#     g = isindexed(ex) ? EinGraph(ex; ctx=ctx, inputs...) : ExGraph(ex; ctx=ctx, inputs...)
+#     return g, _xdiff(g)
+# end
+
 
 
 """
-rdiff(ex::Expr; ctx=Dict(), xs...)
+xdiff(ex::Expr; ctx=Dict(), inputs...)
 
-Differentiate expression `ex` w.r.t. variables `xs`. `xs` should be a list
+Differentiate expression `ex` w.r.t. variables `inputs`. `inputs` should be a list
 of key-value pairs with keys representing variables in expression and values
-representing 'example values' (used e.g. for type inference). Returns an array
-of symbolic expressions representing derivatives of ex w.r.t. each of passed
-variabels. Example:
+representing 'example values' (used e.g. for type inference). Returns an expression
+that calculates original value and derivatives of all inputs. Example:
 
-    rdiff(:(x^n), x=1, n=1)
-    # ==> Dict(:x => :(n * x ^ (n - 1)),  -- derivative w.r.t. :x
-    #          :n => :(log(x) * x ^ n))   -- derivative w.r.t. :n
+    xdiff(:(x^n); x=1, n=1)
+    # quote
+    #   tmp704 = 1
+    #   tmp708 = log(x)
+    #   tmp705 = n - tmp704
+    #   tmp706 = x .^ tmp705
+    #   tmp702 = x ^ n
+    #   dtmp702_dx = n * tmp706
+    #   tmp709 = x .^ n
+    #   dtmp702_dn = tmp708 * tmp709
+    #   tmp711 = (tmp702, dtmp702_dx, dtmp702_dn)
+    # end
 
-Options (passed via `ctx`):
-
-  * :method - method to differentiate with (:vec or :ein)
-  * :outfmt - output format (:vec or :ein)
 """
-function rdiff(ex::Expr; ctx=Dict(), inputs...)
+function xdiff(ex::Expr; ctx=Dict(), inputs...)
     ctx = to_context(ctx)
-    meth = @get(ctx, :method, any(x -> !isa(x[2], Number), inputs) ? :ein : :vec)
-    if meth == :ein && !is_einstein(ex)
-        ex = to_einstein(ex; ctx=ctx, inputs...)
-    end
-    g, adj = _rdiff(ex; ctx=ctx, inputs...)
-    vars = Set([var for (var, val) in inputs])
-    dexs = Dict([(var, dex) for (var, dex) in adj if in(var, vars)])
-    outfmt = @get(ctx, :outfmt, :vec)
-    outdexs = format_output(meth, outfmt, ctx, dexs, inputs)
-    return outdexs
-end
-
-
-function example_val{T}(::Type{T})
-    if T <: Number
-        return one(T)
-    elseif T <: Array
-        return ones(eltype(T), [1 for i=1:ndims(T)]...)
+    # determine format: if any of arguments is a tensor, use Einstein notation
+    # otherwise use simple scalar differentiation
+    if isindexed(ex)
+        g = EinGraph(ex; ctx=ctx, inputs...)
+    elseif any(x -> !isa(x[2], Number), inputs)
+        iex = to_einstein(ex; ctx=ctx, inputs...)
+        g = EinGraph(iex; ctx=ctx, inputs...)
     else
-        error("Don't know how to create example value for type $T")
+        g = ExGraph(ex; ctx=ctx, inputs...)
     end
-end
-
-
-"""
-rdiff(f::Function; ctx=Dict(), xs...)
-
-Differentiate function `f` w.r.t. its arguments. See `rdiff(ex::Expr, xs...)`
-for more details.
-"""
-function rdiff{N}(f::Function, types::NTuple{N,DataType}; ctx=Dict())
-    ctx = to_context(ctx)
-    args, ex = funexpr(f, types)
-    vals = map(example_val, types)
-    inputs = collect(zip(args, vals))
-    ex = sanitize(ex)
-    return rdiff(ex; ctx=ctx, inputs...)
+    dg = _xdiff(g)
+    cg = cat(g, dg)
+    propagate_deriv_size!(cg)
+    propagate_size!(cg)
+    outvars = unshift!([deriv_name(g.ctx[:z_var], var) for (var, _) in inputs], varname(g[end]))
+    outg = topsort(cg)
+    push!(outg, :tuple, Espresso.genname(), Expr(:tuple, outvars...))
+    codegen = @get(ctx, :codegen, VectorCodeGen())
+    out = generate_code(codegen, outg, outvars)
+    return out
 end
 
 
@@ -305,19 +338,17 @@ fdiff(f::Function; ctx=Dict(), xs...)
 Differentiate function `f` w.r.t. its arguments and return tuple of derivative
 function, one per argument.
 
-See also `rdiff()`.
+See also `xdiff()`.
 """
 function fdiff{N}(f::Function, types::NTuple{N,DataType}; ctx=Dict())
-    args, _ = funexpr(f, types)
-    dexs = rdiff(f, types; ctx=ctx)
+    args, ex = funexpr(f, types)
+    ex = sanitize(ex)
+    inputs = [arg => example_val(t) for (arg, t) in zip(args, types)]
+    dex = xdiff(ex; ctx=ctx, inputs...)
     mod = ctx[:mod]
     typed_args = [Expr(:(::), x, t) for (x, t) in zip(args, types)]
     header = Expr(:tuple, typed_args...)
-    fns = Array(Any, 0)
-    for arg in args        
-        fn_ex = Expr(:->, header, dexs[arg])
-        fn = eval(mod, fn_ex)
-        push!(fns, fn)
-    end
-    return fns
+    fn_ex = Expr(:->, header, dex)
+    fn = eval(mod, fn_ex)
+    return fn
 end

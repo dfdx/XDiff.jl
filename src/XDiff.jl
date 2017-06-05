@@ -3,10 +3,14 @@ __precompile__()
 
 module XDiff
 
-export _rdiff,
-       rdiff,
-       fdiff,
-       @diff_rule
+export
+    _xdiff,
+    xdiff,
+    fdiff,
+    @diff_rule,
+    VectorCodeGen,
+    EinCodeGen
+    
 
 include("core.jl")
 

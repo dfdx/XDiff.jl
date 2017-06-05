@@ -22,3 +22,77 @@ type_ansestors{T}(t::Type{Vector{T}}) =
     [t, Vector, DenseVector, AbstractVector, AbstractArray, Any]
 type_ansestors{T}(t::Type{Matrix{T}}) =
     [t, Matrix, DenseMatrix, AbstractMatrix, AbstractArray, Any]
+
+
+
+function bcast_to_call(pex::Expr)
+    @assert pex.head == :(.)
+    return Expr(:call, pex.args[1], pex.args[2].args...)
+end
+
+
+deriv_name(z::Symbol, x::Symbol) = Symbol("d$(z)_d$(x)")
+
+
+function replace_node(g::AbstractExGraph, vname::Symbol, nds::Vector{ExNode})
+    i = indexof(g, vname)
+    delete!(g, vname)
+    insert!(g, nds)
+end
+
+
+function find_related(g::AbstractExGraph, dydx_v::Symbol)
+    subderivs = Symbol[]
+    i = 1
+    name = Symbol("$(dydx_v)__$(i)")
+    while haskey(g, name)
+        push!(subderivs, name)
+        i += 1
+        name = Symbol("$(dydx_v)__$(i)")
+    end
+    return subderivs
+end
+
+
+function expand_const(g::AbstractExGraph, ex)
+    st = Dict{Symbol, Any}()
+    vnames = get_var_names(ex)
+    for vname in vnames
+        if haskey(g, vname) && isa(g[vname], ExNode{:constant})
+            st[vname] = g[vname].val
+        end
+    end
+    return subs(ex, st)
+end
+
+
+# derivative size propagation
+
+function propagate_deriv_size!(g::AbstractExGraph, dd_name::Symbol)
+    sizes = @get_or_create(g.ctx, :sizes, Dict())
+    rg = match(r"(d.+)_(d.+)", String(dd_name))
+    @assert length(rg.captures) == 2
+    str_dnames = rg.captures
+    zname = Symbol(str_dnames[1][2:end])
+    xname = Symbol(split(str_dnames[2][2:end], "__")[1]) # cut down `__$(i)` part if any
+    zsize, xsize = (sizes[zname], sizes[xname])
+    if zsize == :(())
+        # output var is constant
+        sizes[dd_name] = xsize
+    else
+        sizes[dd_name] = :(($zsize..., $xsize...)) |> simplify
+    end
+end
+
+
+function propagate_deriv_size!(g::AbstractExGraph)
+    for nd in g.tape
+        vname = varname(nd)
+        if match(r"(d.+)_(d.+)", String(vname)) != nothing
+            propagate_deriv_size!(g, vname)
+        end
+    end
+end
+
+
+

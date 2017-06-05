@@ -4,47 +4,69 @@
 symbolic approach to finding tensor derivatives.
 Unlike automatic differentiation packages, XDiff.jl can output not only ready-to-use
 derivative functions, but also their symbolic expressions suitable for
-further optimization and code generation. Here's an example:
+further optimization and code generation.
+
+### Expression differentiation
+
+`xdiff` takes an expression and a set of "example values" and returns another expression
+that calculates the value together with derivatives of an output variable w.r.t each
+argument. Example values are anything similar to expected data, i.e. with the same data type
+and number of dimensions, though not necessarily the same number of elements (for tensors).
+In the example below we want `w` and `x` to be vectors while `b` to be a scalar. 
 
 ```julia
-function ann(w1, w2, w3, x1)
-    _x2 = w1 * x1
-    x2 = log(1. + exp(_x2))   # soft RELU unit
-    _x3 = w2 * x2
-    x3 = log(1. + exp(_x3))   # soft RELU unit
-    x4 = sum(w3 * x3)
-    return 1. ./ (1. + exp(-x4))  # sigmoid output
-end
-
-# ANN input parameter types
-types = (Matrix{Float64}, Matrix{Float64}, Matrix{Float64}, Vector{Float64})
-
-# generate example input
-w1, w2, w3, x1 = randn(10,10), randn(10,10), randn(1,10), randn(10)
-
-# create a dict of symbolic derivatives
-dexs = rdiff(ann, types)
-dexs[:w1]   # ==> quote ... end
-
-# create derivative functions
-dw1, dw2, dw3, _ = fdiff(ann, types)
-dw1(randn(100,100), randn(100,100), randn(1,100), randn(100))
+# expressions after a semicolon are "example values" - something that looks like expected data
+xdiff(:(y = sum(w .* x) + b); w=rand(3), x=rand(3), b=rand())
+# quote 
+#     dy_dtmp862 = 1.0
+#     dy_dw = dy_dtmp862 .* x
+#     dy_db = 1.0
+#     dy_dx = dy_dtmp862 .* w
+#     tmp862 = w' * x
+#     y = tmp862 .+ b
+#     tmp869 = (y, dy_dw, dy_dx, dy_db)
+# end
 ```
 
-Another unique feature of XDiff.jl is that it can generate expressions not only for functions R^n -> R,
-but also functions R^n -> R^m using Einstein indexing notation:
+`xdiff` can also generate expressions for vector-valued functions (i.e. R^n -> R^m)
+using a variant of [Einstein indexing notation](https://en.wikipedia.org/wiki/Einstein_notation):
+
 
 ```julia
-# by default, rdiff tries to generate vectorized output
-# we can make it return expressions in Einstein notation using :outfmt option
-ctx = [:outfmt => :ein]
-
-# when differtiating an expression, we need to provide "example values",
-# i.e. anything that has the same type and number of dimensions as we expect
-# from real values
-dexs = rdiff(:(z = W*x + b); ctx=ctx, W=rand(3,4), x=rand(4), b=rand(3))
-dexs[:W]   # ==> :(dz_dW[i,m,n] = x[n] * (i == m))
+xdiff(:(y = w .* x + b); ctx=Dict(:codegen => EinCodeGen()), w=rand(3), x=rand(3), b=rand())
+# quote
+#     tmp685 = 1.0
+#     dy_dy[i, j] = tmp685 * (i == j)
+#     dy_dtmp677[i, m] = dy_dy[i, i] * (i == m)
+#     tmp686[i, i] = dy_dtmp677[i, i] .* x[i]
+#     dy_dw[i, j] = tmp686[i, i] * (i == j)
+#     tmp687[i, i] = dy_dtmp677[i, i] .* w[i]
+#     dy_dx[i, j] = tmp687[i, i] * (i == j)
+#     tmp677[i] = w[i] .* x[i]
+#     dy_db[i] = dy_dy[i, i]
+#     y[i] = tmp677[i] + b
+#     tmp688 = (y, dy_dw, dy_dx, dy_db)
+# end
 ```
+
+### Function differentiation
+
+`fdiff` provides a convenient interface for generating function derivatives:
+
+```
+# evaluate using `include("file_with_function.jl")` 
+f(w, x, b) = sum(w .* x) .+ b
+types = (Vector{Float64}, Vector{Float64}, Float64)
+
+df = fdiff(f, types)
+df(rand(3), rand(3), rand())
+# (1.228714504221751, [0.444729, 0.238441, 0.741301], [0.666098, 0.302282, 0.517627], 1.0)
+```
+Note, that `fdiff` will _try_ to extract function body as it was written, but it doesn't always
+work smoothly. One сommon case when function body isn't available is when function is defined
+in REPL, so for better experience load functions using `include(<filename>)` or `using <module>`.
+
+
 
 ### Limitations
 
@@ -63,16 +85,21 @@ many conditions may be expressed as multiplication like `f(x) * (x > 0) + g(x) *
 
 On the high level, scalar expressions are differentiated as follows:
 
-1. Expression is parsed into an `ExGraph` - a set of primitive expressions, mostly assginments and single function calls.
-2. Resulting `ExGraph` is evaluated using example values to determine types and shape of all variables (forward pass).
-3. Similar to reverse-mode automatic differentiation, derivatives are propagated backward from output to input variables. Unlike AD, however, derivatives aren't represented as values, but instead as symbolic exprssions.
+1. Expression is parsed into an `ExGraph` - a set of primitive expressions,
+mostly assignments and single function calls.
+2. Resulting `ExGraph` is evaluated using example values to determine types and
+shape of all variables (forward pass).
+3. Similar to reverse-mode automatic differentiation, derivatives are propagated
+backward from output to input variables. Unlike AD, however, derivatives aren't
+represented as values, but instead as symbolic exprssions.
 
 Tensor expressions exploit very similar pipeline, but act in Einstein notation.
 
-1. Tensor expression is transformed into an Einstein notation.
-2. Expression in Einstein notation is parsed into an `ExGraph`.
-3. Resulting `ExGraph` is evaluated.
-4. Partial derivatives are computed using tensor or element-wise rules for each element of each tensor, then propagated from output to input variables.
+1. Tensor expression is transformed into Einstein notation.
+2. Expression in Einstein notation is parsed into an `Einraph` (indexed variant of `ExGraph`).
+3. Resulting `EinGraph` is evaluated.
+4. Partial derivatives are computed using tensor or element-wise rules for each element
+of each tensor, then propagated from output to input variables.
 5. Optionally, derivative expressions are converted back to vectorized notation. 
 
 
