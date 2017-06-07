@@ -30,3 +30,4 @@ end
 include("linreg.jl")
 include("ann.jl")
 include("autoencoder.jl")
+include("others.jl")

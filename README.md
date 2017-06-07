@@ -53,7 +53,7 @@ xdiff(:(y = w .* x + b); ctx=Dict(:codegen => EinCodeGen()), w=rand(3), x=rand(3
 
 `fdiff` provides a convenient interface for generating function derivatives:
 
-```
+```julia
 # evaluate using `include("file_with_function.jl")` 
 f(w, x, b) = sum(w .* x) .+ b
 types = (Vector{Float64}, Vector{Float64}, Float64)

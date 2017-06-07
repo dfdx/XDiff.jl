@@ -31,7 +31,7 @@ function TensorDeriv(g::EinGraph, dex::Expr; guards=nothing)
     full_vname, idxs = split_indexed(dex.args[1])
     vname, wrtname_ = Symbol.(split(String(full_vname), "_"))
     var_idx_len = g[undname(vname)].val |> size |> length
-    vidxs, wrtidxs_ = idxs[1:var_idx_len], idxs[var_idx_len+1:end]
+    vidxs, wrtidxs_ = isempty(idxs) ? ([],  []) : (idxs[1:var_idx_len], idxs[var_idx_len+1:end])
     var, wrt = make_indexed(vname, vidxs), make_indexed(wrtname_, wrtidxs_)
     ex = without_guards(dex.args[2])
     guards = guards != nothing ? guards : find_guards(dex.args[2])
