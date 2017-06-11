@@ -1,9 +1,9 @@
 
 # pseudo summation functions
-@tdiff_rule (Z = X[i] * I[i]) (dZ/dX[j] = 1)
-@tdiff_rule (Z = X[i] * I[i]) (dZ/dI[j] = X[j])
-@tdiff_rule (Z = X[i,j] * I[i,j]) (dZ/dX[m,n] = 1)
-@tdiff_rule (Z = X[i,j] * I[i,j]) (dZ/dI[m,n] = X[m,n])
+# @tdiff_rule (Z = X[i] * I[i]) (dZ/dX[j] = 1)
+# @tdiff_rule (Z = X[i] * I[i]) (dZ/dI[j] = X[j])
+# @tdiff_rule (Z = X[i,j] * I[i,j]) (dZ/dX[m,n] = 1)
+# @tdiff_rule (Z = X[i,j] * I[i,j]) (dZ/dI[m,n] = X[m,n])
 
 # matrix-by-matrix product
 @tdiff_rule (Z[i,j] = X[i,k] * Y[k,j]) (dZ[i,j]/dX[m,n] = Y[n,j] * (i == m))
@@ -28,14 +28,9 @@
 # index permutation (broken)
 # @tdiff_rule (Z[i,j] = X[j,i]) (dZ[i,j]/dX[m,n] = 1 * (i == n) * (j == m))
 
-# some element-wise functions
-# @tdiff_rule (Z[i] = X[i] + Y[i]) (dZ[i]/dX[j] = 1 * (i == j))
-# @tdiff_rule (Z[i] = X[i] + Y[i]) (dZ[i]/dY[j] = 1 * (i == j))
-# @tdiff_rule (Z[i,j] = X[i,j] + Y[i,j]) (dZ[i,j]/dX[m,n] = 1 * (i == m) * (j == n))
-# @tdiff_rule (Z[i,j] = X[i,j] + Y[i,j]) (dZ[i,j]/dY[m,n] = 1 * (i == m) * (j == n))
+# convolution
+@tdiff_rule (Z[i,j] = X[i+m-1, j+n-1] * W[m,n]) (dZ[i,j] / dW[m,n] = X[i+m-1, j+n-1])
+@tdiff_rule (Z[i,j] = X[i+m-1, j+n-1] * W[m,n]) (dZ[i,j] / dX[p,q] = W[p-i+1, q-j+1])
 
-
-# TODO: rewrite elementwise rules to handle expressions like
-# Z[i,j] = _op(X[i], Y[i,j]) ==> dZ[i,j]/dX[m] ...
-
-# or better define strict rules for addition?
+@tdiff_rule (Z = X[i+m-1, j+n-1] * W[m,n]) (dZ / dW[m,n] = X[i+m-1, j+n-1])
+@tdiff_rule (Z = X[i+m-1, j+n-1] * W[m,n]) (dZ / dX[p,q] = W[p-i+1, q-j+1])

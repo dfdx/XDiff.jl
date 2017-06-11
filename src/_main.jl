@@ -8,10 +8,14 @@ end
 
 
 function main_873()
-    ex = :(z = log.(sum(x)))
-    x = rand(2)
-    inputs = [:x => x]
-    ctx = Dict()
-    
+    ex = quote
+        Y = conv2(X, W)
+        Z = sum(Y)
+    end
+    X = rand(5,5)
+    W = rand(3,3)
+    inputs = [:X => X, :W => X]
+
+
     dex = xdiff(ex; inputs...)
 end

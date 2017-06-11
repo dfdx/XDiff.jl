@@ -54,18 +54,6 @@ function find_related(g::AbstractExGraph, dydx_v::Symbol)
 end
 
 
-function expand_const(g::AbstractExGraph, ex)
-    st = Dict{Symbol, Any}()
-    vnames = get_var_names(ex)
-    for vname in vnames
-        if haskey(g, vname) && isa(g[vname], ExNode{:constant})
-            st[vname] = g[vname].val
-        end
-    end
-    return subs(ex, st)
-end
-
-
 # derivative size propagation
 
 function propagate_deriv_size!(g::AbstractExGraph, dd_name::Symbol)

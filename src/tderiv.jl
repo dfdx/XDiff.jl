@@ -290,7 +290,7 @@ function to_tensor_rule{T}(ew_rule::DiffRule, orig_idxs::Vector{Vector{T}}, idx:
     # w.r.t. variable
     wrt_name = tvar_names[idx]
     dwrt_name = dname(wrt_name)
-    wrt_idxs = next_indices(Set(flatten(Symbol, orig_idxs)), 1, length(orig_idxs[idx + 1]))
+    wrt_idxs = next_indices(Set(flatten(orig_idxs)), 1, length(orig_idxs[idx + 1]))
     dwrt = make_indexed(dwrt_name, wrt_idxs)
     # new pattern
     tpat = Expr(:call, op, tvars...)
