@@ -138,7 +138,15 @@ function derivative(pex::Expr, types::Vector{DataType}, idx::Int;
     @assert pex.head == :call
     op = canonical(mod, pex.args[1])
     maybe_rule = find_rule(op, types, idx)
-    rule = !isnull(maybe_rule) ? get(maybe_rule) : register_rule(op, types, idx)
+    if !isnull(maybe_rule)
+        rule = get(maybe_rule)
+    else
+        error("Primitive expression $pex with types $types at index $idx " *
+              "doesn't have a registered derivative. Use `@diff_rule` to register one. " *
+              "Note: currently automatic derivative inference of nested functions " *
+              "is turned off as unreliable, but this may change in the future.")
+        # register_rule(op, types, idx)
+    end
     return apply_rule(rule, pex) |> sanitize
 end
 

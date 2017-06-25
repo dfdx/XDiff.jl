@@ -8,6 +8,11 @@ end
 
 
 function main_873()
+    ex = :(sum(x + 1))
+    ctx = Dict()
+    inputs = [:x => rand(2)]
+
+    
     ex = quote
         Y = conv2(X, W)
         Z = sum(Y)

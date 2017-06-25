@@ -1,4 +1,9 @@
 
+# core.jl - single place to load all package definitions.
+#
+# If you are willing to learn the package structure, just go through
+# included files one by one, read header notes and other comments
+
 using Compat
 using Iterators
 using Espresso
