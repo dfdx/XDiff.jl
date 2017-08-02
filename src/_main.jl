@@ -21,7 +21,7 @@ function main_873()
     w1=rand(2000, 10000)
     w2=rand(1000, 2000)
     w3=rand(1000, 1000)
-    x1=rand(10000)
+    x1=rand(10000, 500)
     inputs = [:w1=>w1, :w2=>w2, :w3=>w3, :x1=>x1]
     ctx = Dict()
 

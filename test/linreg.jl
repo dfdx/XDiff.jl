@@ -4,7 +4,7 @@ function linreg_loss(w, b, x, y)
     loss = sum(abs2(yhat - y))
 end
 
-inputs = [:w => [1.0, 1.0], :b => 2.0, :x => [3.0, 3.0], 4.0]
+inputs = [:w => [1.0, 1.0], :b => 2.0, :x => [3.0, 3.0], :y => 4.0]
 vals = ([1.0, 1.0], 2.0, [3.0, 3.0], 4.0)
 dlinreg_loss = xdiff(linreg_loss; inputs...)
 dvals = dlinreg_loss(vals...)

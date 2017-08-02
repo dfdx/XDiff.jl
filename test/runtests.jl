@@ -1,21 +1,16 @@
 using XDiff
-using Espresso
+using Espresso: @get_or_create
 using ReverseDiff: GradientTape, GradientConfig, gradient, gradient!, compile
 using Base.Test
 using BenchmarkTools
-
-# TODO:
-import Espresso: @get_or_create
-
 
 macro rdcmp(f, params...)    
     inputs = [param.args[1] => eval(param.args[2]) for param in params]
     ret = Expr(:let, Expr(:block))    
     body = quote
         # inputs = $([inp.args[1] => inp.args[2] for inp in _inputs])
-        vals = [inp[2] for inp in $inputs]
-        types = ([typeof(inp[2]) for inp in $inputs]...)        
-        df = xdiff($f, types)
+        vals = [inp[2] for inp in $inputs]        
+        df = xdiff($f, vals)
         dvals = df(vals...)
         dvals_a = [dvals...]
 
@@ -32,7 +27,8 @@ end
 
 function perf_test(f; inputs...)
     vals = ([val for (name, val) in inputs]...)
-    df = xdiff(f; inputs...)
+    println("Compiling derivatives using XDiff")
+    @time df = xdiff(f; inputs...)
     mem = Dict()
     println("Testing XDiff...")
     @benchmark df(vals...; mem=$mem)
@@ -42,7 +38,8 @@ function perf_test(f; inputs...)
     cfg = GradientConfig(vals)
     results = map(similar, vals)
     println("Testing ReverseDiff...")
-    @benchmark gradient!(results, compiled_f_tape, vals)    
+    # @benchmark gradient!(results, compiled_f_tape, vals)
+    @benchmark gradient!(results, f_tape, vals)
 end
 
 

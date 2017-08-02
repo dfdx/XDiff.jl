@@ -6,10 +6,12 @@ module XDiff
 export
     _xdiff,
     xdiff,
-    fdiff,
     @diff_rule,
     VectorCodeGen,
-    EinCodeGen
+    EinCodeGen,
+    BlasCodeGen,
+    # reexport from Espresso
+    @get_or_create
     
 
 include("core.jl")
