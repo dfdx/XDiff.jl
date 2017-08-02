@@ -320,16 +320,12 @@ function xdiff(ex::Expr; ctx=Dict(), inputs...)
         g = ExGraph(ex; ctx=ctx, inputs...)
     end
     dg = _xdiff(g)
-    cg = cat(g, dg)
-    propagate_deriv_size!(cg)
-    propagate_size!(cg)
+    rg = cat(g, dg)
     outvars = unshift!([deriv_name(g.ctx[:z_var], var) for (var, _) in inputs], varname(g[end]))
-    outg_ = topsort(cg)
-    push!(outg_, :tuple, Espresso.genname(), Expr(:tuple, outvars...))
-    outg = eliminate_common(outg_)
-    codegen = @get(ctx, :codegen, VectorCodeGen())
-    out = generate_code(codegen, outg, outvars)
-    return out
+    push!(rg, :tuple, Espresso.genname(), Expr(:tuple, outvars...))
+    evaluate!(rg)
+    codegen = @get(ctx, :codegen, BlasCodeGen(:mem))
+    return generate_code(codegen, rg)    
 end
 
 
@@ -339,17 +335,34 @@ fdiff(f::Function; ctx=Dict(), xs...)
 Differentiate function `f` w.r.t. its arguments and return tuple of derivative
 function, one per argument.
 
-See also `xdiff()`.
+See also `xdiff(ex::Expr; ctx=Dict(), xs...)`.
 """
-function fdiff{N}(f::Function, types::NTuple{N,DataType}; ctx=Dict())
+function xdiff(f::Function; ctx=Dict(), inputs...)
+    types = ([typeof(val) for (name, val) in inputs]...)
     args, ex = funexpr(f, types)
-    ex = sanitize(ex)
-    inputs = [arg => example_val(t) for (arg, t) in zip(args, types)]
+    ex = sanitize(ex)    
     dex = xdiff(ex; ctx=ctx, inputs...)
     mod = ctx[:mod]
     typed_args = [Expr(:(::), x, t) for (x, t) in zip(args, types)]
-    header = Expr(:tuple, typed_args...)
+    mem_ex = :($(Expr(:parameters, Expr(:kw, :mem, :(Dict())))))
+    header = Expr(:tuple, mem_ex, typed_args...)
     fn_ex = Expr(:->, header, dex)
     fn = eval(mod, fn_ex)
     return fn
 end
+
+
+
+# function xdiff{N}(f::Function, types::NTuple{N,DataType}; ctx=Dict())
+#     args, ex = funexpr(f, types)
+#     ex = sanitize(ex)
+#     inputs = [arg => example_val(t) for (arg, t) in zip(args, types)]
+#     dex = xdiff(ex; ctx=ctx, inputs...)
+#     mod = ctx[:mod]
+#     typed_args = [Expr(:(::), x, t) for (x, t) in zip(args, types)]
+#     mem_ex = :($(Expr(:parameters, :(mem=Dict()))))
+#     header = Expr(:tuple, mem_ex, typed_args...)
+#     fn_ex = Expr(:->, header, dex)
+#     fn = eval(mod, fn_ex)
+#     return fn
+# end

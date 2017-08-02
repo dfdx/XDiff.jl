@@ -9,5 +9,5 @@ function ann(w1, w2, w3, x1)
 end
 
 
-@rdcmp ann w1=rand(10,10) w2=rand(10,10) w3=rand(1,10) x1=rand(10)
+# @rdcmp ann w1=rand(10,10) w2=rand(10,10) w3=rand(1,10) x1=rand(10)
 
