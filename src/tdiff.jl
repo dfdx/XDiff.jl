@@ -95,7 +95,7 @@ function rev_step!(g::EinGraph, dg::EinGraph, nd::ExNode{:call})
     z = g.ctx[:z_var]
     cg = cat(g, dg)
     dzdy = TensorDeriv(g, dg[deriv_name(z, y)] |> to_expr)
-    sizes = g.ctx[:sizes]
+    # sizes = g.ctx[:sizes]
     for x in dependencies(nd)
         if isa(g[x], ExNode{:constant})
             # don't clog dg with unnesessary derivs
@@ -110,7 +110,7 @@ function rev_step!(g::EinGraph, dg::EinGraph, nd::ExNode{:call})
         else
             parse!(dg, to_expr(dzdx))
         end
-        sizes[dzdx_vname] = deriv_size(sizes[z], sizes[x])
+        # sizes[dzdx_vname] = deriv_size(sizes[z], sizes[x])
     end
 end
 

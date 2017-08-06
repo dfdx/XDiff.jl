@@ -1,28 +1,23 @@
 using XDiff
-using Espresso
-using ReverseDiff
+using ReverseDiff: GradientTape, GradientConfig, gradient, gradient!, compile
 using Base.Test
+using BenchmarkTools
 
+function test_compare(f; inputs...)
+    vals = ([val for (name, val) in inputs]...)
+    df = xdiff(f; inputs...)
+    # compare_test runs in an older world age than the generated function
+    # need to invoke the latest one in the test
+    dvals = Base.invokelatest(df, vals...)
+    dvals_a = [dvals...]
 
-macro rdcmp(f, params...)    
-    inputs = [param.args[1] => eval(param.args[2]) for param in params]
-    ret = Expr(:let, Expr(:block))    
-    body = quote
-        # inputs = $([inp.args[1] => inp.args[2] for inp in _inputs])
-        vals = [inp[2] for inp in $inputs]
-        types = ([typeof(inp[2]) for inp in $inputs]...)        
-        df = fdiff($f, types)
-        dvals = df(vals...)
-        dvals_a = [dvals...]
-
-        rd_dvals = ReverseDiff.gradient($f, (vals...,))
-        rd_dvals_a = [rd_dvals...]
-        @test isapprox(dvals_a[2:end], rd_dvals_a)
-    end
-    for arg in body.args
-        push!(ret.args[1].args, arg)
-    end
-    return ret
+    f_tape = GradientTape(f, vals)
+    compiled_f_tape = compile(f_tape)
+    cfg = GradientConfig(vals)
+    results = map(similar, vals)
+    gradient!(results, compiled_f_tape, vals)
+    results_a = [results...]
+    @test isapprox(results_a, dvals_a[2:end]; atol=0.1)
 end
 
 

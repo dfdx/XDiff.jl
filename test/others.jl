@@ -1,7 +1,3 @@
 
-f(x) = log.(sum(x))    
-@rdcmp f x=rand(2)
-
-
-
-    
+myfunc(x) = log(sum(x))
+test_compare(myfunc; x=rand(2))

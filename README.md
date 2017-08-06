@@ -1,5 +1,7 @@
 # XDiff.jl - eXpression Differentiation package
 
+[![Build Status](https://travis-ci.org/dfdx/XDiff.jl.svg?branch=master)](https://travis-ci.org/dfdx/XDiff.jl)
+
 **XDiff.jl** is an expression differentiation package, supporting fully
 symbolic approach to finding tensor derivatives.
 Unlike automatic differentiation packages, XDiff.jl can output not only ready-to-use
@@ -11,58 +13,73 @@ further optimization and code generation.
 `xdiff` takes an expression and a set of "example values" and returns another expression
 that calculates the value together with derivatives of an output variable w.r.t each
 argument. Example values are anything similar to expected data, i.e. with the same data type
-and number of dimensions, though not necessarily the same number of elements (for tensors).
-In the example below we want `w` and `x` to be vectors while `b` to be a scalar. 
+and size.
+In the example below we want `w` and `x` to be vectors of size `(3,)` while `b` to be a scalar. 
 
 ```julia
 # expressions after a semicolon are "example values" - something that looks like expected data
 xdiff(:(y = sum(w .* x) + b); w=rand(3), x=rand(3), b=rand())
 # quote 
-#     dy_dtmp862 = 1.0
-#     dy_dw = dy_dtmp862 .* x
-#     dy_db = 1.0
-#     dy_dx = dy_dtmp862 .* w
-#     tmp862 = w' * x
-#     y = tmp862 .+ b
-#     tmp869 = (y, dy_dw, dy_dx, dy_db)
+#     dy!dx = @get_or_create(mem, :dy!dx, zeros(Float64, (3,)))
+#     dy!dw = @get_or_create(mem, :dy!dw, zeros(Float64, (3,)))
+#     y = @get_or_create(mem, :y, zero(Float64))
+#     tmp658 = @get_or_create(mem, :tmp658, zero(Float64))
+#     dy!dtmp658 = @get_or_create(mem, :dy!dtmp658, zero(Float64))
+#     tmp658 = sum(w .* x)
+#     y = tmp658 .+ b
+#     dy!dtmp658 = 1.0
+#     dy!dw .= x
+#     dy!dx .= w
+#     tmp677 = (y, dy!dw, dy!dx, dy!dtmp658)
 # end
 ```
 
-`xdiff` can also generate expressions for vector-valued functions (i.e. R^n -> R^m)
-using a variant of [Einstein indexing notation](https://en.wikipedia.org/wiki/Einstein_notation):
-
+By default, `xdiff` generates a highly-optimized code that uses a set of buffers stored in
+a dictionary `mem`. You may also generate slower, but more readable expression using `VectorCodeGen`:
 
 ```julia
-xdiff(:(y = w .* x + b); ctx=Dict(:codegen => EinCodeGen()), w=rand(3), x=rand(3), b=rand())
+ctx = Dict(:codegen => VectorCodeGen())
+xdiff(:(y = sum(w .* x) + b); ctx=ctx, w=rand(3), x=rand(3), b=rand())
+# quote 
+#     tmp691 = w' * x
+#     y = tmp691 + b
+#     dy!dtmp691 = 1.0
+#     dy!db = 1.0
+#     dy!dw = x
+#     dy!dx = w
+#     tmp698 = (y, dy!dw, dy!dx, dy!db)
+# end
+```
+
+or in [Einstein indexing notation](https://en.wikipedia.org/wiki/Einstein_notation) using `EinCodeGen`:
+
+```julia
+ctx = Dict(:codegen => EinCodeGen())
+xdiff(:(y = sum(w .* x) + b); ctx=ctx, w=rand(3), x=rand(3), b=rand())
 # quote
-#     tmp685 = 1.0
-#     dy_dy[i, j] = tmp685 * (i == j)
-#     dy_dtmp677[i, m] = dy_dy[i, i] * (i == m)
-#     tmp686[i, i] = dy_dtmp677[i, i] .* x[i]
-#     dy_dw[i, j] = tmp686[i, i] * (i == j)
-#     tmp687[i, i] = dy_dtmp677[i, i] .* w[i]
-#     dy_dx[i, j] = tmp687[i, i] * (i == j)
-#     tmp677[i] = w[i] .* x[i]
-#     dy_db[i] = dy_dy[i, i]
-#     y[i] = tmp677[i] + b
-#     tmp688 = (y, dy_dw, dy_dx, dy_db)
+#     tmp700 = w[i] .* x[i]
+#     y = tmp700 + b
+#     dy!dtmp700 = 1.0
+#     dy!db = 1.0
+#     dy!dw[j] = dy!dtmp700 .* x[j]
+#     dy!dx[j] = dy!dtmp700 .* w[j]
+#     tmp707 = (y, dy!dw, dy!dx, dy!db)
 # end
 ```
 
 ### Function differentiation
 
-`fdiff` provides a convenient interface for generating function derivatives:
+`xdiff` also provides a convenient interface for generating function derivatives:
 
 ```julia
 # evaluate using `include("file_with_function.jl")` 
 f(w, x, b) = sum(w .* x) .+ b
-types = (Vector{Float64}, Vector{Float64}, Float64)
 
-df = fdiff(f, types)
+df = xdiff(f; w=rand(3), x=rand(3), b=rand())
 df(rand(3), rand(3), rand())
-# (1.228714504221751, [0.444729, 0.238441, 0.741301], [0.666098, 0.302282, 0.517627], 1.0)
+# (0.8922305671741435, [0.936149, 0.80665, 0.189789], [0.735201, 0.000282879, 0.605989], 1.0)
 ```
-Note, that `fdiff` will _try_ to extract function body as it was written, but it doesn't always
+Note, that `xdiff` will _try_ to extract function body as it was written, but it doesn't always
 work smoothly. One сommon case when function body isn't available is when function is defined
 in REPL, so for better experience load functions using `include(<filename>)` or `using <module>`.
 

@@ -1,4 +1,5 @@
 
+
 include("core.jl")
 
 function load_espresso()
@@ -8,19 +9,13 @@ end
 
 
 function main_873()
-    ex = :(sum(x + 1))
-    ctx = Dict()
-    inputs = [:x => rand(2)]
-
+    ex = :(log(sum(x)))
     
-    ex = quote
-        Y = conv2(X, W)
-        Z = sum(Y)
-    end
-    X = rand(5,5)
-    W = rand(3,3)
-    inputs = [:X => X, :W => X]
-
+    x = rand(2)
+    inputs = [:x=>x]
+    ctx = Dict()
 
     dex = xdiff(ex; inputs...)
+    
 end
+
