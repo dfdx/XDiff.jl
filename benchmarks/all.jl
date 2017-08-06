@@ -1,24 +1,9 @@
 
-# using XDiff
-# using Espresso: @get_or_create
-import Espresso
-import XDiff
-for n in Base.names(Espresso, true) @eval import Espresso: $n end
-for n in Base.names(XDiff, true) @eval import XDiff: $n end
-
-
+using XDiff
 using ReverseDiff: GradientTape, GradientConfig, gradient, gradient!, compile
 using BenchmarkTools
 
 include("functions.jl")
-
-
-function load_espresso()
-    # TODO: remove
-    for n in Base.names(Espresso, true) @eval import Espresso: $n end
-    for n in Base.names(XDiff, true) @eval import XDiff: $n end
-end
-
 
 
 function perf_test(f; compile_tape=true, inputs...)
@@ -69,10 +54,12 @@ end
 
 function benchmark_mlp1()
     f = mlp1
+    println("\n## On larger data\n")
     w1=rand(2000, 10000); w2=rand(1000, 2000); w3=rand(1000, 1000); x1=rand(10000, 500);
     inputs = [:w1=>w1, :w2=>w2, :w3=>w3, :x1=>x1];
     perf_test(f; inputs...)
 
+    println("\n## On smaller data\n")
     w1=rand(200, 1000); w2=rand(100, 200); w3=rand(100, 100); x1=rand(1000, 10);
     inputs = [:w1=>w1, :w2=>w2, :w3=>w3, :x1=>x1];
     perf_test(f; inputs...)
@@ -81,11 +68,13 @@ end
 
 function benchmark_mlp2()
     f = mlp2
+    println("\n## On larger data\n")
     w1 = randn(2000, 10000); w2 = randn(1000, 2000); w3 = randn(1000, 1000); x1 = randn(10000, 500);
     b1 =  randn(2000); b2 = randn(1000); b3 = randn(1000)
     inputs = [:w1=>w1, :w2=>w2, :w3=>w3, :b1 => b1, :b2 => b2, :b3 => b3, :x1=>x1];
     perf_test(f; inputs...)
 
+    println("\n## On smaller data\n")
     w1=rand(200, 1000); w2=rand(100, 200); w3=rand(100, 100); x1=rand(1000, 10);
     b1 =  rand(200); b2 = rand(100); b3 = rand(100)
     inputs = [:w1=>w1, :w2=>w2, :w3=>w3, :b1 => b1, :b2 => b2, :b3 => b3, :x1=>x1];
@@ -93,13 +82,16 @@ function benchmark_mlp2()
 end
 
 
+# NOTE: this benchmark doesn't work currently!
 function benchmark_rnn()
     f = rnn
+    println("\n## On larger data\n")
     Wxh = randn(4096, 4096); Whh = randn(4096, 4096); Why = randn(128, 4096);
     hprev = randn(4096); x = randn(4096); y = randn(128);    
     inputs = [:Wxh=>Wxh, :Whh=>Whh, :Why=>Why, :hprev => hprev, :x => x, :y=>y];
     perf_test(f; inputs...)
 
+    println("\n## On smaller data\n")
     w1=rand(200, 1000); w2=rand(100, 200); w3=rand(100, 100); x1=rand(1000, 10);
     b1 =  rand(200); b2 = rand(100); b3 = rand(100)
     inputs = [:w1=>w1, :w2=>w2, :w3=>w3, :b1 => b1, :b2 => b2, :b3 => b3, :x1=>x1];

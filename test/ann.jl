@@ -12,6 +12,3 @@ test_compare(ann; w1=rand(10,10), w2=rand(10,10), w3=rand(1,10), x1=rand(10))
 
 f = ann
 inputs = [:w1=>rand(10,10), :w2=>rand(10,10), :w3=>rand(1,10), :x1=>rand(10)]
-
-# @rdcmp ann w1=rand(10,10) w2=rand(10,10) w3=rand(1,10) x1=rand(10)
-

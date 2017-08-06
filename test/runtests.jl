@@ -1,12 +1,14 @@
 using XDiff
 using ReverseDiff: GradientTape, GradientConfig, gradient, gradient!, compile
 using Base.Test
-
+using BenchmarkTools
 
 function test_compare(f; inputs...)
     vals = ([val for (name, val) in inputs]...)
     df = xdiff(f; inputs...)
-    dvals = df(vals...)
+    # compare_test runs in an older world age than the generated function
+    # need to invoke the latest one in the test
+    dvals = Base.invokelatest(df, vals...)
     dvals_a = [dvals...]
 
     f_tape = GradientTape(f, vals)
@@ -15,11 +17,12 @@ function test_compare(f; inputs...)
     results = map(similar, vals)
     gradient!(results, compiled_f_tape, vals)
     results_a = [results...]
-    @test isapprox(results_a,  dvals_a[2:end])
+    @test isapprox(results_a, dvals_a[2:end]; atol=0.1)
 end
 
 
-# include("linreg.jl")
+
+include("linreg.jl")
 include("ann.jl")
-# include("autoencoder.jl")
-# include("others.jl")
+include("autoencoder.jl")
+include("others.jl")

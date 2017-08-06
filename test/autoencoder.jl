@@ -11,4 +11,6 @@ function autoencoder_cost(We1, We2, Wd, b1, b2, x)
     return cost
 end
 
-@rdcmp autoencoder_cost We1=rand(4,5) We2=rand(3,4) Wd=rand(5,3) b1=rand(4) b2=rand(3) x=rand(5)
+# @rdcmp autoencoder_cost We1=rand(4,5) We2=rand(3,4) Wd=rand(5,3) b1=rand(4) b2=rand(3) x=rand(5)
+test_compare(autoencoder_cost; We1=rand(4,5), We2=rand(3,4), Wd=rand(5,3),
+             b1=rand(4), b2=rand(3), x=rand(5))

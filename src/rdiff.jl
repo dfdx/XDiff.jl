@@ -28,9 +28,11 @@
 #    "linearized" version of expression. Each node in this graph represents:
 #
 #     * function call: `ExNode{:call}`
+#     * broadcasting: `ExNode{:bcast}`
 #     * assignment: `ExNode{:(=)}`
 #     * input variable: `ExNode{:input}`
 #     * constant value: `ExNode{:constant}`
+#     * tuple: `ExNode{:tuple}`
 #
 #    Nodes are created and put onto a "tape" (list of nodes) using `parse!()`
 #    function in a topological order, so no node may refer to a dependency
@@ -325,7 +327,7 @@ function xdiff(ex::Expr; ctx=Dict(), inputs...)
     push!(rg, :tuple, Espresso.genname(), Expr(:tuple, outvars...))
     evaluate!(rg)
     codegen = @get(ctx, :codegen, BufCodeGen(:mem))
-    return generate_code(codegen, rg)    
+    return generate_code(codegen, rg)
 end
 
 
@@ -340,7 +342,7 @@ See also `xdiff(ex::Expr; ctx=Dict(), xs...)`.
 function xdiff(f::Function; ctx=Dict(), inputs...)
     types = ([typeof(val) for (name, val) in inputs]...)
     args, ex = funexpr(f, types)
-    ex = sanitize(ex)    
+    ex = sanitize(ex)
     dex = xdiff(ex; ctx=ctx, inputs...)
     mod = ctx[:mod]
     typed_args = [Expr(:(::), x, t) for (x, t) in zip(args, types)]
