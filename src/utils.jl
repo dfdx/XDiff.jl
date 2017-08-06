@@ -31,7 +31,7 @@ function bcast_to_call(pex::Expr)
 end
 
 
-deriv_name(z::Symbol, x::Symbol) = Symbol("d$(z)_d$(x)")
+deriv_name(z::Symbol, x::Symbol) = Symbol("d$(z)!d$(x)")
 
 
 function replace_node(g::AbstractExGraph, vname::Symbol, nds::Vector{ExNode})

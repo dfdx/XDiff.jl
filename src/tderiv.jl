@@ -21,7 +21,7 @@ end
 """
 Create a TensorDeriv from an expression. E.g. in:
 
-     dy_dx[i,j] = W[i,j]
+     dy!dx[i,j] = W[i,j]
 
 `x` and `y` will be looked up in `g` to find their sizes and make a derivative, e.g.:
 
@@ -29,7 +29,7 @@ Create a TensorDeriv from an expression. E.g. in:
 """
 function TensorDeriv(g::EinGraph, dex::Expr; guards=nothing)
     full_vname, idxs = split_indexed(dex.args[1])
-    vname, wrtname_ = Symbol.(split(String(full_vname), "_"))
+    vname, wrtname_ = Symbol.(split(String(full_vname), "!"))
     var_idx_len = g[undname(vname)].val |> size |> length
     vidxs, wrtidxs_ = isempty(idxs) ? ([],  []) : (idxs[1:var_idx_len], idxs[var_idx_len+1:end])
     var, wrt = make_indexed(vname, vidxs), make_indexed(wrtname_, wrtidxs_)
@@ -86,7 +86,7 @@ end
 
 
 function single_var(td::TensorDeriv)
-    new_name = Symbol("$(varname(td))_$(wrtname(td))")
+    new_name = Symbol("$(varname(td))!$(wrtname(td))")
     new_idxs = vcat(varidxs(td), wrtidxs(td))
     return make_indexed(new_name, new_idxs)
 end

@@ -180,7 +180,7 @@ end
 """Forward pass of differentiation"""
 function forward_pass!(g::AbstractExGraph)
     evaluate!(g, varname(g.tape[end]))
-    propagate_size!(g)
+    # propagate_size!(g)
     return g
 end
 
@@ -324,7 +324,7 @@ function xdiff(ex::Expr; ctx=Dict(), inputs...)
     outvars = unshift!([deriv_name(g.ctx[:z_var], var) for (var, _) in inputs], varname(g[end]))
     push!(rg, :tuple, Espresso.genname(), Expr(:tuple, outvars...))
     evaluate!(rg)
-    codegen = @get(ctx, :codegen, BlasCodeGen(:mem))
+    codegen = @get(ctx, :codegen, BufCodeGen(:mem))
     return generate_code(codegen, rg)    
 end
 
