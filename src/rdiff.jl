@@ -302,10 +302,10 @@ that calculates original value and derivatives of all inputs. Example:
     #   tmp705 = n - tmp704
     #   tmp706 = x .^ tmp705
     #   tmp702 = x ^ n
-    #   dtmp702_dx = n * tmp706
+    #   dtmp702!dx = n * tmp706
     #   tmp709 = x .^ n
-    #   dtmp702_dn = tmp708 * tmp709
-    #   tmp711 = (tmp702, dtmp702_dx, dtmp702_dn)
+    #   dtmp702!dn = tmp708 * tmp709
+    #   tmp711 = (tmp702, dtmp702!dx, dtmp702!dn)
     # end
 
 """
@@ -325,6 +325,8 @@ function xdiff(ex::Expr; ctx=Dict(), inputs...)
     rg = cat(g, dg)
     outvars = unshift!([deriv_name(g.ctx[:z_var], var) for (var, _) in inputs], varname(g[end]))
     push!(rg, :tuple, Espresso.genname(), Expr(:tuple, outvars...))
+    rg = topsort(rg)
+    infer_deriv_size!(rg)  # need to know size to evaluate things like `dz!dx[i] = 1.0`
     evaluate!(rg)
     codegen = @get(ctx, :codegen, BufCodeGen(:mem))
     return generate_code(codegen, rg)

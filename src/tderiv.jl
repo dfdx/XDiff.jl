@@ -68,6 +68,10 @@ getwrtvar(td::TensorDeriv) = td.wrt
 wrtname(td::TensorDeriv) = split_indexed(getwrtvar(td))[1]
 wrtidxs(td::TensorDeriv) = split_indexed(getwrtvar(td))[2]
 
+lhs_indices(td::TensorDeriv) = vcat(varidxs(td), wrtidxs(td))
+rhs_indices(td::TensorDeriv) = convert(Vector{Any}, unique(flatten(find_indices(getexpr(td)))))
+free_indices(td::TensorDeriv) = convert(Vector{Any}, setdiff(rhs_indices(td), lhs_indices(td)))
+
 Espresso.getexpr(td::TensorDeriv) = td.ex
 Espresso.getguards(td::TensorDeriv) = td.guards
 
@@ -188,6 +192,24 @@ function reindex_to_match(dzdy::TensorDeriv, dydx::TensorDeriv)
 end
 
 
+"""
+Reindex sibling derivatives so that:
+
+    * td1's var indices match td2's w.r.t. indices
+    * no other indices in td1 equal any indices in td2
+"""
+function reindex_siblings_to_match(td1::TensorDeriv, td2::TensorDeriv)
+    common_idxs_st = Dict(zip(lhs_indices(td2), lhs_indices(td1)))
+    # replace free indices from td2 with anything not in td1
+    all_idxs1 = Set{Any}(all_indices(td1)) 
+    free_idxs2_st = index_replacements(all_idxs1, collect(free_indices(td2)))        
+    st = merge(free_idxs2_st, common_idxs_st)
+    new_td2_ex = subs(to_expr_pp(td2), st) |> sanitize
+    new_td2 = TensorDeriv(new_td2_ex)
+    return td1, new_td2
+end
+
+
 # """
 # Elementwise multuplication of tensor derivatives.
 # Example:
@@ -214,14 +236,6 @@ function ⊗(dzdy::TensorDeriv, dydx::TensorDeriv)
     return dzdx
 end
 
-
-
-"""Find indices on RHS of TensorDeriv which aren't present on LHS"""
-function free_indices(td::TensorDeriv)
-    lhs_idxs = vcat(varidxs(td), wrtidxs(td))
-    rhs_idxs = flatten(get_indices(getexpr(td)))
-    return setdiff(rhs_idxs, lhs_idxs)
-end
 
 # presumably, we need to use extend_deriv instead
 function ⊕(td1::TensorDeriv, td2::TensorDeriv)
