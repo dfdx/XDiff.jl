@@ -8,8 +8,9 @@ julia:
 notifications:
   email: false
 # uncomment the following lines to override the default test script
-#script:
+# script:
 #  - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
+#  - julia -e 'Pkg.add("Espresso"); Pkg.checkout("Espresso")'
 #  - julia -e 'Pkg.clone(pwd()); Pkg.build("XDiff"); Pkg.test("XDiff"; coverage=true)'
 after_success:
   # push coverage results to Coveralls
