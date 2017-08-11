@@ -4,7 +4,6 @@
 # If you are willing to learn the package structure, just go through
 # included files one by one, read header notes and other comments
 
-using Compat
 using IterTools
 using Espresso
 importall Espresso

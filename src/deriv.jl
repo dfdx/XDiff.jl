@@ -4,7 +4,7 @@
 const IDX_NAMES = Espresso.IDX_NAMES
 
 
-@compat abstract type AbstractDiffRule end
+abstract type AbstractDiffRule end
 
 struct DiffRule <: AbstractDiffRule
     pat::Expr        # pattern of expression to differentiate
