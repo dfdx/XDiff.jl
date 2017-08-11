@@ -5,7 +5,7 @@
 # included files one by one, read header notes and other comments
 
 using Compat
-using Iterators
+using IterTools
 using Espresso
 importall Espresso
 import Espresso: canonical, canonical_calls, to_context, OpName
