@@ -83,8 +83,8 @@ end
 # end
 
 
-function permute_indices{T}(lhs_idxs::Vector{T},
-                            rhs_idxs::Vector{T})
+function permute_indices(lhs_idxs::Vector{T},
+                         rhs_idxs::Vector{T}) where T
     diff_idxs = union(setdiff(Set(lhs_idxs), Set(rhs_idxs)),
                       setdiff(Set(rhs_idxs), Set(lhs_idxs)))
     f_rhs_idxs = [idx for idx in rhs_idxs if !in(idx, diff_idxs)]

@@ -8,7 +8,7 @@ For array types it includes unparametrized versions of types, i.e.:
     # ==> [Array{Float64,1}, Array{T,1}, DenseArray{T,1},
            AbstractArray{T,1}, AbstractArray{T,N}, Any]
 """
-function type_ansestors{T<:Number}(t::Type{T})
+function type_ansestors(t::Type{T}) where T<:Number
     types = Type[]
     while t != Any
         push!(types, t)
@@ -18,9 +18,9 @@ function type_ansestors{T<:Number}(t::Type{T})
     return types
 end
 
-type_ansestors{T}(t::Type{Vector{T}}) =
+type_ansestors(t::Type{Vector{T}}) where {T} =
     [t, Vector, DenseVector, AbstractVector, AbstractArray, Any]
-type_ansestors{T}(t::Type{Matrix{T}}) =
+type_ansestors(t::Type{Matrix{T}}) where {T} =
     [t, Matrix, DenseMatrix, AbstractMatrix, AbstractArray, Any]
 
 
