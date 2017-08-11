@@ -54,11 +54,13 @@ function find_related(g::AbstractExGraph, dydx_v::Symbol)
 end
 
 
-# derivative size propagation
+# (symbolic) derivative size propagation
+
+const DERIV_NAME_PATTERN = r"(d.+)!(d.+)"
 
 function propagate_deriv_size!(g::AbstractExGraph, dd_name::Symbol)
     sizes = @get_or_create(g.ctx, :sizes, Dict())
-    rg = match(r"(d.+)_(d.+)", String(dd_name))
+    rg = match(DERIV_NAME_PATTERN, String(dd_name))
     @assert length(rg.captures) == 2
     str_dnames = rg.captures
     zname = Symbol(str_dnames[1][2:end])
@@ -76,11 +78,37 @@ end
 function propagate_deriv_size!(g::AbstractExGraph)
     for nd in g.tape
         vname = varname(nd)
-        if match(r"(d.+)_(d.+)", String(vname)) != nothing
+        if match(DERIV_NAME_PATTERN, String(vname)) != nothing
             propagate_deriv_size!(g, vname)
         end
     end
 end
 
+
+# (numeric) derivative size propagation
+
+function infer_deriv_size!(g::AbstractExGraph, dd_name::Symbol)    
+    rg = match(DERIV_NAME_PATTERN, String(dd_name))
+    @assert length(rg.captures) == 2
+    str_dnames = rg.captures
+    zname = Symbol(str_dnames[1][2:end])
+    xname = Symbol(split(str_dnames[2][2:end], "__")[1]) # cut down `__$(i)` part if any
+    # in case z or x haven't been evaluated and their size isn't known yet
+    evaluate!(g, zname)
+    evaluate!(g, xname)
+    sizes = @get_or_create(g.ctx, :rsizes, Dict())
+    zsize, xsize = (sizes[zname], sizes[xname])
+    sizes[dd_name] = (zsize..., xsize...)
+end
+
+
+function infer_deriv_size!(g::AbstractExGraph)
+    for nd in g.tape
+        vname = varname(nd)
+        if match(DERIV_NAME_PATTERN, String(vname)) != nothing
+            infer_deriv_size!(g, vname)
+        end
+    end
+end
 
 

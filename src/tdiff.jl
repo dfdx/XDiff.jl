@@ -1,18 +1,20 @@
 
 ## utils
 
-function extend_deriv!(dg::EinGraph, dzdx::TensorDeriv)
+function extend_deriv!(g::EinGraph, dg::EinGraph, dzdx::TensorDeriv)
     vname, idxs = split_indexed(single_var(dzdx))
     old_idxs = varidxs(dg[vname])
     var = make_indexed(vname, old_idxs)
     # substitution table to reindex new dzdx with the old indices
-    st = Dict(zip(idxs, old_idxs))
+    # st = Dict(zip(idxs, old_idxs))
     subderivs = find_related(dg, vname)
     pos = indexof(dg, vname)
     if isempty(subderivs)
         # first split
-        ex_1 = getexpr(dg[vname])
-        ex_2 = subs(getexpr(dzdx), st)
+        old_dzdx = TensorDeriv(g, to_expr(dg[vname]))
+        dzdx = reindex_siblings_to_match(old_dzdx, dzdx)[2]
+        ex_1 = getexpr(old_dzdx)
+        ex_2 = getexpr(dzdx)
         vname_1 = Symbol("$(vname)__1")
         var_1 = make_indexed(vname_1, old_idxs)
         vname_2 = Symbol("$(vname)__2")
@@ -27,6 +29,7 @@ function extend_deriv!(dg::EinGraph, dzdx::TensorDeriv)
         # dg already contains subderivatives for dzdx_v
         last_idx = parse(Int, split(subderivs[end] |> String, "__")[end])
         new_var = make_indexed(Symbol("$(vname)__$(last_idx + 1)"), old_idxs)
+        # TODO: should use reindex_sinlings_to_match instead
         new_ex = subs(getexpr(dzdx), st)
         prev_ex = getexpr(dg[vname])
         sub_dg = EinGraph()
@@ -39,6 +42,45 @@ function extend_deriv!(dg::EinGraph, dzdx::TensorDeriv)
     insert!(dg, pos, new_nodes)
     return dg
 end
+
+# function extend_deriv!(dg::EinGraph, dzdx::TensorDeriv)
+#     vname, idxs = split_indexed(single_var(dzdx))
+#     old_idxs = varidxs(dg[vname])
+#     var = make_indexed(vname, old_idxs)
+#     # substitution table to reindex new dzdx with the old indices
+#     st = Dict(zip(idxs, old_idxs))
+#     subderivs = find_related(dg, vname)
+#     pos = indexof(dg, vname)
+#     if isempty(subderivs)
+#         # first split
+#         ex_1 = getexpr(dg[vname])
+#         ex_2 = subs(getexpr(dzdx), st)
+#         vname_1 = Symbol("$(vname)__1")
+#         var_1 = make_indexed(vname_1, old_idxs)
+#         vname_2 = Symbol("$(vname)__2")
+#         var_2 = make_indexed(vname_2, old_idxs)
+#         sub_dg = EinGraph()
+#         parse!(sub_dg, :($var_1 = $ex_1))
+#         parse!(sub_dg, :($var_2 = $ex_2))
+#         parse!(sub_dg, :($var = $var_1 .+ $var_2))
+#         sub_dg = fuse_assigned(sub_dg)
+#         new_nodes = sub_dg.tape
+#     else
+#         # dg already contains subderivatives for dzdx_v
+#         last_idx = parse(Int, split(subderivs[end] |> String, "__")[end])
+#         new_var = make_indexed(Symbol("$(vname)__$(last_idx + 1)"), old_idxs)
+#         new_ex = subs(getexpr(dzdx), st)
+#         prev_ex = getexpr(dg[vname])
+#         sub_dg = EinGraph()
+#         parse!(sub_dg, :($new_var = $new_ex))
+#         parse!(sub_dg, :($var = $prev_ex .+ $new_var))
+#         sub_dg = fuse_assigned(sub_dg)
+#         new_nodes = sub_dg.tape
+#     end
+#     delete!(dg, pos)
+#     insert!(dg, pos, new_nodes)
+#     return dg
+# end
 
 
 function permute_indices{T}(lhs_idxs::Vector{T},
@@ -101,12 +143,12 @@ function rev_step!(g::EinGraph, dg::EinGraph, nd::ExNode{:call})
             # don't clog dg with unnesessary derivs
             continue
         end
-        dydx = tderivative(iex, x)        
+        dydx = tderivative(iex, x)
         dzdx = dzdy ⊗ dydx
         dzdx = expand_const(cg, dzdx) |> simplify
         dzdx_vname = split_indexed(single_var(dzdx))[1]
         if haskey(dg, dzdx_vname)
-            extend_deriv!(dg, dzdx)
+            extend_deriv!(g, dg, dzdx)
         else
             parse!(dg, to_expr(dzdx))
         end

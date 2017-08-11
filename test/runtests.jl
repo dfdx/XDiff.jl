@@ -1,7 +1,7 @@
 using XDiff
 using ReverseDiff: GradientTape, GradientConfig, gradient, gradient!, compile
 using Base.Test
-using BenchmarkTools
+# using BenchmarkTools
 
 function test_compare(f; inputs...)
     vals = ([val for (name, val) in inputs]...)
