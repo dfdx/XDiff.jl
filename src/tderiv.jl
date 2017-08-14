@@ -124,7 +124,7 @@ end
 Given a set of existing indices and current position of iterator,
 find the next index not in the set.
 """
-function next_index{T}(existing::Set{T}, pos::Int)
+function next_index(existing::Set{T}, pos::Int) where T
     while pos <= length(IDX_NAMES) && in(IDX_NAMES[pos], existing)
         pos += 1
     end
@@ -136,7 +136,7 @@ function next_index{T}(existing::Set{T}, pos::Int)
 end
 
 
-function next_indices{T}(existing::Set{T}, pos::Int, count::Int)
+function next_indices(existing::Set{T}, pos::Int, count::Int) where T
     new_indices = Array{Symbol}(0)
     for i=1:count
         new_idx, pos = next_index(existing, pos)
@@ -150,7 +150,7 @@ end
 Given a set of existing indicies and possible duplicates, find for each duplicate
 a replacement - index from IDX_NAMES that is not used yet.
 """
-function index_replacements{T}(existing::Set{T}, maybedups::Vector{T})
+function index_replacements(existing::Set{T}, maybedups::Vector{T}) where T
     repls = Dict{Symbol,Symbol}()
     pos = 1
     for idx in maybedups
@@ -268,7 +268,7 @@ end
 
 ## tensor differentiation rules
 
-immutable TensorDiffRule <: AbstractDiffRule
+struct TensorDiffRule <: AbstractDiffRule
     pat::Expr             # pattern of expression to differentiate
     deriv::TensorDeriv    # pattern of differentiation expression
 end
@@ -286,7 +286,7 @@ Convert scalar diff rule to a tensor diff rule.
                e.g. for `z[i] = X[i,j] * y[j]` it's [[:i], [:i, :j], [:j]]
  * idx       - index of input parameter to differentiate w.r.t. it
 """
-function to_tensor_rule{T}(ew_rule::DiffRule, orig_idxs::Vector{Vector{T}}, idx::Int)
+function to_tensor_rule(ew_rule::DiffRule, orig_idxs::Vector{Vector{T}}, idx::Int) where T
     ew_pat = ew_rule.pat
     op = ew_pat.args[1]
     ew_ex = ew_rule.dpat
