@@ -29,7 +29,7 @@ Create a TensorDeriv from an expression. E.g. in:
 """
 function TensorDeriv(g::EinGraph, dex::Expr; guards=nothing)
     full_vname, idxs = split_indexed(dex.args[1])
-    vname, wrtname_ = Symbol.(split(String(full_vname), "!"))
+    vname, wrtname_ = split_deriv_name(full_vname)
     var_idx_len = g[undname(vname)].val |> size |> length
     vidxs, wrtidxs_ = isempty(idxs) ? ([],  []) : (idxs[1:var_idx_len], idxs[var_idx_len+1:end])
     var, wrt = make_indexed(vname, vidxs), make_indexed(wrtname_, wrtidxs_)
