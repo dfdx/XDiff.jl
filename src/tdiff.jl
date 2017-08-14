@@ -169,13 +169,17 @@ end
 
 
 function reverse_pass!(g::EinGraph)
-    z_var = getvar(g[end])
+    z_var = haskey(g.ctx, :cost) ? getvar(g[g.ctx[:cost]]) : getvar(g[end])
     z, z_idxs = split_indexed(z_var)
     g.ctx[:z_var] = z
     dzdz_ex = make_dzdz_expr(z, z_idxs)
     dg = EinGraph(dzdz_ex)
+    # TODO: bfs_deps and then rev_step! throgh dependencies
+    cost_deps = collect_deps(g, z_var)
     for nd in reverse(g.tape)
-        rev_step!(g, dg, nd)
+        if varname(nd) in cost_deps
+            rev_step!(g, dg, nd)
+        end
     end
     outvars = [deriv_name(z, varname(nd)) for nd in g.tape if isa(nd, ExNode{:input})]
     return fuse_assigned(dg; outvars=outvars)
