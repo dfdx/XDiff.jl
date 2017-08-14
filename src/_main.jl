@@ -19,31 +19,21 @@ function find_bad(g)
 end
 
 
-function main_873()
-    We1 = rand(20, 100); b1 = rand(20); We2 = rand(10, 20); b2 = rand(10);
-    Wd = rand(100, 10); x = rand(100, 10);
-    inputs = [:We1 => We1, :We2 => We2, :Wd => Wd, :b1 => b1, :b2 => b2, :x => x];
-    ctx = Dict()
-    
-    ex = quote
-        firstLayer = logistic(We1 * x .+ b1)
-        encodedInput = logistic(We2 * firstLayer .+ b2)
-        reconstructedInput = logistic(Wd * encodedInput)
-        cost = sum(reconstructedInput .- x .^ 2.0)
+function main_873()    
+    Wxh = randn(3, 4); Whh = randn(3,3); Why = randn(5,3)
+    hprev = randn(3); h = rand(3)
+    x = randn(4); y = rand(5)
+    ctx = Dict(:cost => :cost)
+    inputs = [:Wxh => Wxh, :Whh => Whh, :Why => Why, :hprev => hprev, :h => h, :x => x, :y => y]
+        
+    ex = quote    
+        h = tanh.(Whh * hprev + Wxh * x)
+        yhat = Why * h
+        cost = sum((yhat .- y) .^ 2.0)
+        h, cost
     end
-
-    We = rand(3,4); Wd = rand(4,3); x = rand(4,2)
-    inputs = [:We => We, :Wd => Wd, :x => x]
-    ex = quote
-        y = We * x
-        xd = Wd * y
-        cost = sum(xd .- x)
-    end
-
-    # TODO: g.ctx[:rsizes][:dcost!dxd] is ()
-    # but should be (4, 2)
     
-    ctx = Dict()
+    
     dex = xdiff(ex; inputs...)
 
 end
