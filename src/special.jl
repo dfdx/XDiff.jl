@@ -1,15 +1,11 @@
 
 
-const SPECIAL_PHS = Set{Symbol}([:x, :y, :z, :dz!dx, :dz!dy])
+const SPECIAL_PHS = Set{Symbol}([:x, :x1, :x2, :x3, :x4, :y, :z, :dz!dx, :dz!dy])
 
 const SPECIAL_RULES = Dict{Any, Any}(
-    :(Main.foo) => [:(y = Main.foo(x)) => :(dz!dx = foo_grad(dz!dy, x))],
+    # :(Main.foo) => [:(y = Main.foo(x)) => :(dz!dx = foo_grad(dz!dy, x))],
 
 )
-
-
-isspecial(op) = haskey(SPECIAL_RULES, op)
-
 
 
 function special_derivative(g::EinGraph, iex::Expr, dzdy_vname::Symbol, z::Symbol, x::Symbol)    
@@ -47,4 +43,22 @@ function special_derivative(g::EinGraph, iex::Expr, dzdy_vname::Symbol, z::Symbo
     else
         error("Can't find special differentiation rule matching $iex")
     end
+end
+
+
+
+function _specialdiff(f_ex, df_ex)
+    op = f_ex.args[2].args[1]
+    dop = df_ex.args[2].args[1]
+    push!(Espresso.SPECIAL_FUNCS, op, dop)
+    if !haskey(SPECIAL_RULES, op)
+        SPECIAL_RULES[op] = []
+    end
+    push!(SPECIAL_RULES[op], f_ex => df_ex)
+end
+
+
+macro specialdiff(f_ex, df_ex)
+    _specialdiff(f_ex, df_ex)
+    nothing
 end

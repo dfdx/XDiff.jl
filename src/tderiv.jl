@@ -327,14 +327,14 @@ end
 const TENSOR_DIFF_RULES = Dict{Tuple{OpName, Int}, Vector{TensorDiffRule}}()
 
 
-function push_tdiff_rule!(op::OpName, deriv_idx::Int, rule::TensorDiffRule)
+function push_tensordiff!(op::OpName, deriv_idx::Int, rule::TensorDiffRule)
     if !haskey(TENSOR_DIFF_RULES, (op, deriv_idx))
         TENSOR_DIFF_RULES[(op, deriv_idx)] = TensorDiffRule[]
     end
     push!(TENSOR_DIFF_RULES[(op, deriv_idx)], rule)
 end
 
-function _tdiff_rule(ex, dex)
+function _tensordiff(ex, dex)
     op = canonical(current_module(), ex.args[2].args[1])
     idxs = get_indices(ex.args[2])
     dvar = dex.args[1].args[2]
@@ -346,12 +346,12 @@ function _tdiff_rule(ex, dex)
     var_names = [iex.args[1] for iex in ex.args[2].args[2:end]]
     deriv_idx = find(var_names .== diff_var_name)[1]
     rule = TensorDiffRule(ex, deriv)
-    push_tdiff_rule!(op, deriv_idx, rule)
+    push_tensordiff!(op, deriv_idx, rule)
 end
 
 
-macro tdiff_rule(ex, dex)
-    _tdiff_rule(ex, dex)
+macro tensordiff(ex, dex)
+    _tensordiff(ex, dex)
     nothing
 end
 
@@ -416,7 +416,7 @@ function tderivative(fullex::Expr, idx::Int)
         ew_rule = (!isnull(ew_maybe_rule) ? get(ew_maybe_rule) :
                    register_rule(op, types, idx))
         trule = to_tensor_rule(ew_rule, idxs, idx)
-        push_tdiff_rule!(op, idx, trule)
+        push_tensordiff!(op, idx, trule)
         # now rule is registered, recursively call itself
         return tderivative(fullex, idx)
     end

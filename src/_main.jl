@@ -8,7 +8,7 @@ function load_espresso()
 end
 
 logistic(x) = 1 ./ (1 + exp.(-x))
-@diff_rule logistic(x::Number) 1 (logistic(x) .* (1 .- logistic(x)))
+@scalardiff logistic(x::Number) 1 (logistic(x) .* (1 .- logistic(x)))
 
 
 function find_bad(g)
@@ -18,9 +18,6 @@ function find_bad(g)
     end
 end
 
-
-foo(x) = sum(x, 2)
-foo_grad(dzdy, x) = repmat(dzdy, 1, size(x, 2))
 
 function main_873()
     u = randn(3, 3)

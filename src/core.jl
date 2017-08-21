@@ -9,7 +9,7 @@ using Einsum
 using Espresso
 importall Espresso
 import Espresso: canonical, canonical_calls, to_context, OpName, without_indices
-import Espresso: reduce_equalities, flatten, @get, @get_or_create
+import Espresso: reduce_equalities, flatten, @get, @get_or_create, isspecial
 
 
 
@@ -20,6 +20,7 @@ include("rules.jl")
 include("tderiv.jl")
 include("trules.jl")
 include("special.jl")
+include("specialrules.jl")
 include("codegen.jl")
 include("rdiff.jl")
 include("tdiff.jl")
