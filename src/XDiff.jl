@@ -6,7 +6,9 @@ module XDiff
 export
     _xdiff,
     xdiff,
-    @diff_rule,
+    @scalardiff,
+    @tensordiff,
+    @specialdiff,
     VectorCodeGen,
     EinCodeGen,
     BlasCodeGen,

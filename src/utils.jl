@@ -32,6 +32,7 @@ end
 
 
 deriv_name(z::Symbol, x::Symbol) = Symbol("d$(z)!d$(x)")
+split_deriv_name(vname) = Symbol.(split(String(vname), "!"))
 
 
 function replace_node(g::AbstractExGraph, vname::Symbol, nds::Vector{ExNode})

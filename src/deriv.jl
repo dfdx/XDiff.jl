@@ -29,7 +29,7 @@ Define new differentiation rule. Arguments:
 
 Example:
 
-    @diff_rule *(x::Number, y::Number) 1 y
+    @scalardiff *(x::Number, y::Number) 1 y
 
 Which means: derivative of a product of 2 numbers w.r.t. 1st argument
 is a second argument.
@@ -39,7 +39,7 @@ and not functions of some other variables, because this case will be
 automatically handled by chain rule in the differentiation engine.
 
 """
-macro diff_rule(ex::Expr, idx::Int, dex::Any)
+macro scalardiff(ex::Expr, idx::Int, dex::Any)
     @assert ex.head == :call
     op = opname(current_module(), ex.args[1])
     types = [eval(exa.args[2]) for exa in ex.args[2:end]]
@@ -142,7 +142,7 @@ function derivative(pex::Expr, types::Vector{DataType}, idx::Int;
         rule = get(maybe_rule)
     else
         error("Primitive expression $pex with types $types at index $idx " *
-              "doesn't have a registered derivative. Use `@diff_rule` to register one. " *
+              "doesn't have a registered derivative. Use `@scalardiff` to register one. " *
               "Note: currently automatic derivative inference of nested functions " *
               "is turned off as unreliable, but this may change in the future.")
         # register_rule(op, types, idx)

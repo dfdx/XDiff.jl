@@ -1,6 +1,6 @@
 
 logistic(x) = 1 ./ (1 + exp.(-x))
-@diff_rule logistic(x::Number) 1 (logistic(x) .* (1 .- logistic(x)))
+@scalardiff logistic(x::Number) 1 (logistic(x) .* (1 .- logistic(x)))
 
 # autoencoder cost: sum of squared error
 function autoencoder_cost(We1, We2, Wd, b1, b2, x)

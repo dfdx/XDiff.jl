@@ -8,7 +8,7 @@ function load_espresso()
 end
 
 logistic(x) = 1 ./ (1 + exp.(-x))
-@diff_rule logistic(x::Number) 1 (logistic(x) .* (1 .- logistic(x)))
+@scalardiff logistic(x::Number) 1 (logistic(x) .* (1 .- logistic(x)))
 
 
 function find_bad(g)
@@ -19,21 +19,29 @@ function find_bad(g)
 end
 
 
-function main_873()    
-    Wxh = randn(3, 4); Whh = randn(3,3); Why = randn(5,3)
-    hprev = randn(3); h = rand(3)
-    x = randn(4); y = rand(5)
-    ctx = Dict(:cost => :cost)
-    inputs = [:Wxh => Wxh, :Whh => Whh, :Why => Why, :hprev => hprev, :h => h, :x => x, :y => y]
-        
-    ex = quote    
-        h = tanh.(Whh * hprev + Wxh * x)
-        yhat = Why * h
-        cost = sum((yhat .- y) .^ 2.0)
-        h, cost
+function main_873()
+    u = randn(3, 3)
+    v = randn(3, 3)
+    inputs = [:u => u, :v => v]
+    # ctx = Dict(:codegen => EinCodeGen())
+    ctx = Dict()
+    ex = quote
+        x = u .+ v
+        y = foo(x)
+        z = sum(1.0 .* y)
     end
+
+
+
+    # TODO:
+    # 1. add warning that special functions may not be followed by sum
+    # 2. create an issue for this and think out preprocessing that addes `1.0 .*`
+    #    to all special functions followed by sum (act on graph level?)
+
+    # TODO:
+    # 1. define @scalardiff, @tensordiff and @specialdiff
+    # 2. finally try to create conventional VAE
     
-    
-    dex = xdiff(ex; inputs...)
+    dex = xdiff(ex; ctx=ctx, inputs...)
 
 end

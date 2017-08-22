@@ -143,8 +143,14 @@ function rev_step!(g::EinGraph, dg::EinGraph, nd::ExNode{:call})
             # don't clog dg with unnesessary derivs
             continue
         end
-        dydx = tderivative(iex, x)
-        dzdx = dzdy ⊗ dydx
+        # can find derivatives of special functions if `z` is a scalar
+        if isspecial(getexpr(nd).args[1]) && isa(z, Symbol)
+            dzdy_vname = deriv_name(z, y)
+            dzdx = special_derivative(g, iex, dzdy_vname, z, x)
+        else
+            dydx = tderivative(iex, x)
+            dzdx = dzdy ⊗ dydx
+        end
         dzdx = expand_const(cg, dzdx) |> simplify
         dzdx_vname = split_indexed(single_var(dzdx))[1]
         if haskey(dg, dzdx_vname)
@@ -173,8 +179,7 @@ function reverse_pass!(g::EinGraph)
     z, z_idxs = split_indexed(z_var)
     g.ctx[:z_var] = z
     dzdz_ex = make_dzdz_expr(z, z_idxs)
-    dg = EinGraph(dzdz_ex)
-    # TODO: bfs_deps and then rev_step! throgh dependencies
+    dg = EinGraph(dzdz_ex)   
     cost_deps = collect_deps(g, z_var)
     for nd in reverse(g.tape)
         if varname(nd) in cost_deps
