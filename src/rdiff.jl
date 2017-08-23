@@ -347,7 +347,8 @@ function xdiff(f::Function; ctx=Dict(), inputs...)
     ex = sanitize(ex)
     dex = xdiff(ex; ctx=ctx, inputs...)
     mod = get(ctx, :mod, current_module())  # check why it's not filled in RNN benchmark
-    typed_args = [Expr(:(::), x, t) for (x, t) in zip(args, types)]
+    # typed_args = [Expr(:(::), x, t) for (x, t) in zip(args, types)]
+    typed_args = [x for (x, t) in zip(args, types)]
     mem_ex = :($(Expr(:parameters, Expr(:kw, :mem, :(Dict())))))
     header = Expr(:tuple, mem_ex, typed_args...)
     fn_ex = Expr(:->, header, dex)
