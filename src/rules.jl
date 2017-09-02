@@ -97,21 +97,21 @@
 @scalardiff cosh(x::Number) 1 sinh(x)
 # @scalardiff cosh(x::AbstractArray) 1 sinh(x)
 
-@scalardiff tanh(x::Number) 1 (1. - tanh(x)  * tanh(x))
+@scalardiff tanh(x::Number) 1 (1.0 .- tanh(x) .* tanh(x))
 # @scalardiff tanh(x::AbstractArray) 1 (1. - tanh(x) .* tanh(x))
 
-@scalardiff asin(x::Number) 1 (1 / sqrt(1 - x*x))
+@scalardiff asin(x::Number) 1 (1 ./ sqrt(1 .- x .* x))
 # @scalardiff asin(x::AbstractArray) 1 (1 ./ sqrt(1 - x.*x))
 
-@scalardiff acos(x::Number) 1 (1  / sqrt(1 - x *x))
+@scalardiff acos(x::Number) 1 (1 ./ sqrt(1 .- x .* x))
 # @scalardiff acos(x::AbstractArray) 1 (-1 ./ sqrt(1 - x.*x))
 
-@scalardiff atan(x::Number) 1 (1  / (1 + x*x))
+@scalardiff atan(x::Number) 1 (1 ./ (1 .+ x .* x))
 # @scalardiff atan(x::AbstractArray) 1 (1 ./ (1 + x.*x))
 
 # sqrt
 
-@scalardiff sqrt(x::Number) 1 (0.5 * x^(-0.5))
+@scalardiff sqrt(x::Number) 1 (0.5 * x .^ (-0.5))
 # @scalardiff sqrt(x::AbstractVector) 1 (0.5 .* x .^ (-0.5))
 
 # exp, log

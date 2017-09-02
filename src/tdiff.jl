@@ -10,6 +10,14 @@ function extend_deriv!(g::EinGraph, dg::EinGraph, dzdx::TensorDeriv)
     subderivs = find_related(dg, vname)
     pos = indexof(dg, vname)
     if isempty(subderivs)
+
+        # if wrtname(dzdx) == :dmu
+        #     global _g = g
+        #     global _dg = dg
+        #     global _dzdx = dzdx
+        #     error("here")
+        # end
+            
         # first split
         old_dzdx = TensorDeriv(g, to_expr(dg[vname]))
         dzdx = reindex_siblings_to_match(old_dzdx, dzdx)[2]
@@ -25,12 +33,15 @@ function extend_deriv!(g::EinGraph, dg::EinGraph, dzdx::TensorDeriv)
         parse!(sub_dg, :($var = $var_1 .+ $var_2))
         sub_dg = fuse_assigned(sub_dg)
         new_nodes = sub_dg.tape
-    else
+    else        
         # dg already contains subderivatives for dzdx_v
         last_idx = parse(Int, split(subderivs[end] |> String, "__")[end])
         new_var = make_indexed(Symbol("$(vname)__$(last_idx + 1)"), old_idxs)
         # TODO: should use reindex_sinlings_to_match instead
-        new_ex = subs(getexpr(dzdx), st)
+        # new_ex = subs(getexpr(dzdx), st)
+        old_dzdx = TensorDeriv(g, to_expr(dg[vname]))
+        dzdx = reindex_siblings_to_match(old_dzdx, dzdx)[2]              
+        new_ex = getexpr(dzdx)
         prev_ex = getexpr(dg[vname])
         sub_dg = EinGraph()
         parse!(sub_dg, :($new_var = $new_ex))

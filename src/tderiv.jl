@@ -120,6 +120,9 @@ function Base.show(io::IO, td::TensorDeriv)
 end
 
 
+
+# TODO:  moved to Esresso, import from there
+
 """
 Given a set of existing indices and current position of iterator,
 find the next index not in the set.
