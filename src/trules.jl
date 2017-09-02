@@ -28,6 +28,9 @@
 # index permutation (broken)
 # @tensordiff (Z[i,j] = X[j,i]) (dZ[i,j]/dX[m,n] = 1 * (i == n) * (j == m))
 
+# length
+@tensordiff (Z = length(X[:])) (dZ/dX[i] = 0.0)
+
 # convolution
 @tensordiff (Z[i,j] = X[i+m-1, j+n-1] * W[m,n]) (dZ[i,j] / dW[m,n] = X[i+m-1, j+n-1])
 @tensordiff (Z[i,j] = X[i+m-1, j+n-1] * W[m,n]) (dZ[i,j] / dX[p,q] = W[p-i+1, q-j+1])

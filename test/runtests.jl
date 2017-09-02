@@ -21,7 +21,7 @@ function test_compare(f; inputs...)
 end
 
 
-
+include("aggr.jl")
 include("linreg.jl")
 include("ann.jl")
 include("autoencoder.jl")
