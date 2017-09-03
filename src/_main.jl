@@ -130,7 +130,6 @@ function main_3445()
         cost = mean(latent_loss .+ rec_loss)
     end
     # doesn't work
-    ex = quote        
         z = We * x
         a = Wd * z
         x_rec = exp.(a)
@@ -161,44 +160,8 @@ function main_3445()
     evaluate!(rg)
 
 
-    dex = generate_code(BufCodeGen(:mem), rg)
     # tmp1310 = 1
     # tmp1298 = 1
     # tmp1282 = -0.5
     # dcost!dlatent_loss[i,j] = 1.0
-end
-
-
-
-quote
-    tmp989 = 1
-    tmp964 = -0.5
-    A_mul_B!(z, We, x)
-    A_mul_B!(a, Wd, z)
-    c .= sum(z, 1)
-    rec_loss_mat .= x .* log.(exp.(a))
-    rec_loss .= sum(rec_loss_mat, 1)
-    
-    d .= tmp964 .* c .+ rec_loss
-    
-    tmp980 = length(d)
-    
-    dcost!drec_loss_mat .= tmp989 .* (tmp989 ./ tmp980)
-    
-    dcost!da .= (((tmp989 .* (tmp989 ./ tmp980)) .* x) .* (tmp989 ./ exp.(a))) .* exp.(a)
-    dcost!da .= (((1      .* (1      ./ 100   )) .* x) .* (1      ./ exp.(a))) .* exp.(a)
-    
-    A_mul_Bt!(dcost!dWd, dcost!da, z)
-    
-    At_mul_B!(dcost!dz__2, Wd, dcost!da)
-    
-    dcost!dz__1 .= -0.5 .* sum(dcost!drec_loss_mat, 1)
-    
-    dcost!dz .= dcost!dz__1 .+ dcost!dz__2
-    A_mul_Bt!(dcost!dWe, dcost!dz, x)
-    At_mul_B!(dcost!dx__2, We, dcost!dz)
-    dcost!dx .= (tmp989 .* (tmp989 ./ tmp980)) .* log.(exp.(a)) .+ dcost!dx__2
-    cost = sum(d ./ 100)
-    tmp1006 = (cost, dcost!dWe, dcost!dWd, dcost!dx)
-
 end

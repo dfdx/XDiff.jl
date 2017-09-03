@@ -75,6 +75,5 @@ end
 
     
     
-#     test_compare(vae_cost; inputs...)
 
 # end
