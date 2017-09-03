@@ -19,6 +19,21 @@ function find_bad(g)
 end
 
 
+function main_wewq()
+    ex = quote
+        y = sum(x, 1)
+        y2 = y .+ 2
+        z = sum(y2)
+    end
+    x = rand(3, 4)
+    inputs = [:x => x]
+    ctx = Dict()
+    dex = xdiff(ex; ctx=ctx, inputs...)
+    eval(dex)
+end
+
+
+
 function main_873()
     We1 = randn(500, 784); be1 = randn(500);
     We2 = randn(500, 500); be2 = randn(500);
@@ -96,29 +111,3 @@ function main_2w51()
     dex = xdiff(ex; inputs...)
 end
 
-
-
-quote
-    tmp846 = @get_or_create(mem, :tmp846, zero(Int64))
-    tmp849 = @get_or_create(mem, :tmp849, zeros(Float64, (3,)))
-    tmp852 = @get_or_create(mem, :tmp852, zero(Float64))
-    tmp853 = @get_or_create(mem, :tmp853, zero(Float64))
-    tmp856 = @get_or_create(mem, :tmp856, zero(Float64))
-    tmp854 = @get_or_create(mem, :tmp854, zeros(Float64, (3,)))
-    dz!dx = @get_or_create(mem, :dz!dx, zeros(Float64, (3,)))
-    tmp851 = @get_or_create(mem, :tmp851, zeros(Float64, (3,)))
-    dz!dx__2 = @get_or_create(mem, :dz!dx__2, zeros(Float64, (3,)))
-    dz!dx__1 = @get_or_create(mem, :dz!dx__1, zeros(Float64, (3,)))
-    dz!dz = @get_or_create(mem, :dz!dz, zero(Float64))
-    z = @get_or_create(mem, :z, zero(Float64))
-    dz!dtmp846 = @get_or_create(mem, :dz!dtmp846, zero(Float64))
-    dz!dz = 1.0
-    tmp856 = 0.0
-    tmp852 = -2.0
-    tmp846 = length(x)
-    tmp854 .= (.-)(x) .* tmp846 .^ tmp852
-    dz!dtmp846 = sum(tmp854)
-    dz!dx .= dz!dz .* (x ./ tmp846) .+ dz!dtmp846 .* tmp856
-    z = sum(x ./ tmp846)
-    tmp859 = (z, dz!dx)
-end

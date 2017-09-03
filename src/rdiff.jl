@@ -280,10 +280,19 @@ function _xdiff(g::AbstractExGraph)
 end
 
 
-# function _xdiff(ex::Expr; ctx=Dict(), inputs...)
-#     g = isindexed(ex) ? EinGraph(ex; ctx=ctx, inputs...) : ExGraph(ex; ctx=ctx, inputs...)
-#     return g, _xdiff(g)
-# end
+function proper_graph(ex; ctx=Dict(), inputs...)
+    # determine format: if any of arguments is a tensor, use Einstein notation
+    # otherwise use simple scalar differentiation
+    if isindexed(ex)
+        g = EinGraph(ex; ctx=ctx, inputs...)
+    elseif any(x -> !isa(x[2], Number), inputs)
+        iex = to_einstein(ex; ctx=ctx, inputs...)
+        g = EinGraph(iex; ctx=ctx, inputs...)
+    else
+        g = ExGraph(ex; ctx=ctx, inputs...)
+    end
+    return g
+end
 
 
 
@@ -311,16 +320,7 @@ that calculates original value and derivatives of all inputs. Example:
 """
 function xdiff(ex::Expr; ctx=Dict(), inputs...)
     ctx = to_context(ctx)
-    # determine format: if any of arguments is a tensor, use Einstein notation
-    # otherwise use simple scalar differentiation
-    if isindexed(ex)
-        g = EinGraph(ex; ctx=ctx, inputs...)
-    elseif any(x -> !isa(x[2], Number), inputs)
-        iex = to_einstein(ex; ctx=ctx, inputs...)
-        g = EinGraph(iex; ctx=ctx, inputs...)
-    else
-        g = ExGraph(ex; ctx=ctx, inputs...)
-    end
+    g = proper_graph(ex; ctx=ctx, inputs...)
     dg = _xdiff(g)
     rg = cat(g, dg)
     outvars = unshift!([deriv_name(g.ctx[:z_var], var) for (var, _) in inputs], varname(g[end]))

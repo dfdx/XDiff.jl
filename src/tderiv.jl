@@ -338,6 +338,8 @@ function push_tensordiff!(op::OpName, deriv_idx::Int, rule::TensorDiffRule)
 end
 
 function _tensordiff(ex, dex)
+    ex = sanitize(ex)
+    dex = sanitize(dex)
     op = canonical(current_module(), ex.args[2].args[1])
     idxs = get_indices(ex.args[2])
     dvar = dex.args[1].args[2]
@@ -361,7 +363,7 @@ end
 
 function tfind_rule(fullex::Expr, idx::Int)
     @assert fullex.head == :(=) && fullex.args[2].head == :call
-    op = fullex.args[2].args[1]  # TODO: opname(current_module(), op)?
+    op = fullex.args[2].args[1]
     haskey(TENSOR_DIFF_RULES, (op, idx)) || return Nullable{TensorDiffRule}()
     rules = TENSOR_DIFF_RULES[(op, idx)]
     matches = pat -> !isnull(matchex(pat, fullex; phs=TDIFF_PHS, allow_ex=false))
@@ -369,9 +371,6 @@ function tfind_rule(fullex::Expr, idx::Int)
                          [r.pat for r in rules])
     matching != 0 || return Nullable{TensorDiffRule}()
     return Nullable{TensorDiffRule}(rules[matching])
-
-    # TODO: TensorDiffRule(ew_diff_rule) should take into account qualified names
-
 end
 
 dname(var::Symbol) = Symbol("d$var")

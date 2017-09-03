@@ -1,9 +1,8 @@
 
-# pseudo summation functions
-# @tensordiff (Z = X[i] * I[i]) (dZ/dX[j] = 1)
-# @tensordiff (Z = X[i] * I[i]) (dZ/dI[j] = X[j])
-# @tensordiff (Z = X[i,j] * I[i,j]) (dZ/dX[m,n] = 1)
-# @tensordiff (Z = X[i,j] * I[i,j]) (dZ/dI[m,n] = X[m,n])
+# sum_n
+@tensordiff (Z[i,j] = Espresso.sum_1(X[i,j])) (dZ[i,j]/dX[m,n] = 1.0 * (j == n))
+@tensordiff (Z[i,j] = Espresso.sum_2(X[i,j])) (dZ[i,j]/dX[m,n] = 1.0 * (i == m))
+
 
 # matrix-by-matrix product
 @tensordiff (Z[i,j] = X[i,k] * Y[k,j]) (dZ[i,j]/dX[m,n] = Y[n,j] * (i == m))
