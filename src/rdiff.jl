@@ -354,19 +354,3 @@ function xdiff(f::Function; ctx=Dict(), inputs...)
     fn = eval(mod, fn_ex)
     return fn
 end
-
-
-
-# function xdiff{N}(f::Function, types::NTuple{N,DataType}; ctx=Dict())
-#     args, ex = funexpr(f, types)
-#     ex = sanitize(ex)
-#     inputs = [arg => example_val(t) for (arg, t) in zip(args, types)]
-#     dex = xdiff(ex; ctx=ctx, inputs...)
-#     mod = ctx[:mod]
-#     typed_args = [Expr(:(::), x, t) for (x, t) in zip(args, types)]
-#     mem_ex = :($(Expr(:parameters, :(mem=Dict()))))
-#     header = Expr(:tuple, mem_ex, typed_args...)
-#     fn_ex = Expr(:->, header, dex)
-#     fn = eval(mod, fn_ex)
-#     return fn
-# end

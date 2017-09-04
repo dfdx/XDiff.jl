@@ -1,7 +1,11 @@
 
 # sum_n
-@tensordiff (Z[i,j] = Espresso.sum_1(X[i,j])) (dZ[i,j]/dX[m,n] = 1.0 * (j == n))
-@tensordiff (Z[i,j] = Espresso.sum_2(X[i,j])) (dZ[i,j]/dX[m,n] = 1.0 * (i == m))
+@tensordiff (Z[i,j] = Espresso.sum_1(X[:,j])) (dZ[i,j]/dX[m,n] = 1.0 * (j == n))
+@tensordiff (Z[i,j] = Espresso.sum_2(X[i,:])) (dZ[i,j]/dX[m,n] = 1.0 * (i == m))
+
+# sum_n + sum
+@tensordiff (Z = Espresso.sum_1(X[:,j])) (dZ[i,j]/dX[m,n] = 1.0)
+@tensordiff (Z = Espresso.sum_2(X[i,:])) (dZ[i,j]/dX[m,n] = 1.0)
 
 
 # matrix-by-matrix product

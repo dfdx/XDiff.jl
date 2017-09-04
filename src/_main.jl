@@ -18,81 +18,56 @@ function find_bad(g)
     end
 end
 
+#########################################################
 
-function main_wewq()
+
+function main_1923()
     ex = quote
-        y = sum(x, 1)
-        y2 = y .+ 2
-        z = sum(y2)
+        a = W * x
+        b = sum(a, 1)
+        c = 2b
+        z = sum(c)
     end
-    x = rand(3, 4)
-    inputs = [:x => x]
-    ctx = Dict()
-    dex = xdiff(ex; ctx=ctx, inputs...)
-    eval(dex)
+    x = rand(2,3); W = rand(5, 2)
+    inputs = [:W => W, :x => x]
+
+    g = proper_graph(ex; inputs...)
+    dg = _xdiff(g)
 end
 
 
 
-function main_873()
-    We1 = randn(500, 784); be1 = randn(500);
-    We2 = randn(500, 500); be2 = randn(500);
-    We3 = randn(20, 500); be3 = randn(20);
-    We4 = randn(20, 500); be4 = randn(20);
-    Wd1 = randn(500, 20); bd1 = randn(500);
-    Wd2 = randn(500, 500); bd2 = randn(500);
-    Wd3 = randn(784, 500); bd3 = randn(784);
-    x = rand(784, 100); eps = rand(Normal(0, 1),  20)
-    inputs = [:We1 => We1, :We2 => We2, :We3 => We3, :We4 => We4,
-              :Wd1 => Wd1, :Wd2 => Wd2, :Wd3 => Wd3, :eps => eps, :x => x,
-              :be1 => be1, :be2 => be2, :be3 => be3, :be4 => be4,
-              :bd1 => bd1, :bd2 => bd2, :bd3 => bd3]
-    # ctx = Dict(:codegen => EinCodeGen())
-    ctx = Dict()
-    
-    ex = quote
-        he1 = tanh.(We1 * x) .+ be1
-        he2 = tanh.(We2 * he1) .+ be2
-        mu = We3 * he2 .+ be3
-        log_sigma2 = We4 * he2 .+ be4
-        z = mu .+ sqrt.(exp.(log_sigma2)) .* eps
-        # decoder
-        hd1 = tanh.(Wd1 * z .+ bd1)
-        hd2 = tanh.(Wd2 * hd1 .+ bd2)
-        x_rec = logistic.(Wd3 * hd2 .+ bd3)
-        # loss
-        rec_loss = sum(x .* log.(1e-10 + x_rec) + (1 - x) .* log.(1e-10 + 1 - x_rec), 1)
-        latent_loss = -0.5 * sum(1 + log_sigma2 .- mu .^ 2 - exp.(log_sigma2), 1)
-        cost = sum(rec_loss .+ latent_loss)
-    end
-   
-    dex = xdiff(ex; ctx=ctx, inputs...)
-    eval(dex)    
-    
 
-end
+
+
 
 
 using Distributions
 
-function main_2w51()
-    We1 = randn(500, 784); be1 = randn(500);
-    We2 = randn(500, 500); be2 = randn(500);
-    We3 = randn(20, 500); be3 = randn(20);
-    We4 = randn(20, 500); be4 = randn(20);
-    Wd1 = randn(500, 20); bd1 = randn(500);
-    Wd2 = randn(500, 500); bd2 = randn(500);
-    Wd3 = randn(784, 500); bd3 = randn(784);
-    x = randn(784, 100); eps = rand(Normal(0, 1),  20)
+function xavier_init(dim_in, dim_out; c=1)
+    low = -c * sqrt(6.0 / (dim_in + dim_out))
+    high = c * sqrt(6.0 / (dim_in + dim_out))
+    return rand(Uniform(low, high), dim_in, dim_out)
+end
 
-    inputs = [:We1 => We1, :be1 => be1, :We2 => We2, :be2 => be2, :We3 => We3, :be3 => be3,
-              :We4 => We4, :be4 => be4,
-              :Wd1 => Wd1, :bd1 => bd1, :Wd2 => Wd2, :bd2 => bd2, :Wd3 => Wd3, :bd3 => bd3,
-              :eps => eps, :x => x]
+function main_2w51()
+    We1 = xavier_init(500, 784); be1 = randn(500);
+    We2 = xavier_init(500, 500); be2 = randn(500);
+    We3 = xavier_init(20, 500); be3 = randn(20);
+    We4 = xavier_init(20, 500); be4 = randn(20);
+    Wd1 = xavier_init(500, 20); bd1 = randn(500);
+    Wd2 = xavier_init(500, 500); bd2 = randn(500);
+    Wd3 = xavier_init(784, 500); bd3 = randn(784);
+    x = rand(784, 100); eps = rand(Normal(0, 1),  20)
+    inputs = [:We1 => We1, :be1 => be1, :We2 => We2, :be2 => be2,
+              :We3 => We3, :be3 => be3, :We4 => We4, :be4 => be4,
+              :Wd1 => Wd1, :bd1 => bd1, :Wd2 => Wd2, :bd2 => bd2,
+              :Wd3 => Wd3, :bd3 => bd3, :eps => eps, :x => x]
     vals = [inp[2] for inp in inputs]
-    
+
 
     ex = quote
+        dummy = 42.0
         # encoder
         he1 = tanh.(We1 * x .+ be1)
         he2 = tanh.(We2 * he1 .+ be2)
@@ -104,10 +79,126 @@ function main_2w51()
         hd2 = tanh.(Wd2 * hd1 .+ bd2)
         x_rec = logistic.(Wd3 * hd2 .+ bd3)
         # loss
-        rec_loss = sum(x .* log.(1e-10 + x_rec) + (1 - x) .* log.(1e-10 + 1 - x_rec))
-        latent_loss = -0.5 * sum(1 + log_sigma2 .- mu .^ 2 - exp.(log_sigma2))
-        cost = sum(rec_loss + latent_loss)
+        rec_loss = sum(x .* log.(1e-10 + x_rec) + (1 - x) .* log.(1e-10 + 1 - x_rec), 1)
+        latent_loss = -0.5 * sum(1 + log_sigma2 .- mu .^ 2 - exp.(log_sigma2), 1)
+        cost = mean(rec_loss .+ latent_loss)
     end
+    
     dex = xdiff(ex; inputs...)
+    mem = Dict()
+    eval(dex)
 end
 
+
+using ReverseDiff: GradientTape, GradientConfig, gradient, gradient!, compile
+
+
+function rd_diff(f; inputs...)
+    vals = ([val for (name, val) in inputs]...)
+    f_tape = GradientTape(f, vals)
+    compiled_f_tape = compile(f_tape)
+    cfg = GradientConfig(vals)
+    results = map(similar, vals)
+    gradient!(results, compiled_f_tape, vals)
+    results
+end
+
+
+f(We, Wd, x) = begin
+    z = We * x
+    a = Wd * z
+    x_rec = exp.(a)
+    b = log.(x_rec)
+    rec_loss_mat = x .* b
+    rec_loss = sum(rec_loss_mat, 1)
+    c = sum(z, 1)
+    latent_loss = -0.5 * c
+    d = latent_loss .+ rec_loss
+    cost = mean(d)
+end
+
+
+
+function main_3445()
+    # works
+    ex = quote
+        z = We * x
+        x_rec = exp.(Wd * z)
+        rec_loss_mat = x .* log.(x_rec)
+        rec_loss = sum(rec_loss_mat, 1)
+        latent_loss = sum(z, 1)
+        cost = mean(latent_loss .+ rec_loss)
+    end
+    # doesn't work
+    ex = quote        
+        z = We * x
+        a = Wd * z
+        x_rec = exp.(a)
+        b = log.(x_rec)
+        rec_loss_mat = x .* b
+        rec_loss = sum(rec_loss_mat, 1)
+        c = sum(z, 1)
+        latent_loss = -0.5 * c
+        d = latent_loss .+ rec_loss
+        cost = mean(d)
+    end
+
+
+    We = xavier_init(20, 784);
+    Wd = xavier_init(784, 20);
+    x = rand(784, 100)
+    inputs = [:We => We, :Wd => Wd, :x => x]
+
+    rd_vals = rd_diff(f; inputs...)
+
+    g = proper_graph(ex; inputs...)
+    dg = _xdiff(g)
+    rg = cat(g, dg)
+    outvars = unshift!([deriv_name(g.ctx[:z_var], var) for (var, _) in inputs], varname(g[end]))
+    push!(rg, :tuple, Espresso.genname(), Expr(:tuple, outvars...))
+    rg = topsort(rg)
+    infer_deriv_size!(rg)  # need to know size to evaluate things like `dz!dx[i] = 1.0`
+    evaluate!(rg)
+
+
+    dex = generate_code(BufCodeGen(:mem), rg)
+    # tmp1310 = 1
+    # tmp1298 = 1
+    # tmp1282 = -0.5
+    # dcost!dlatent_loss[i,j] = 1.0
+end
+
+
+
+quote
+    tmp989 = 1
+    tmp964 = -0.5
+    A_mul_B!(z, We, x)
+    A_mul_B!(a, Wd, z)
+    c .= sum(z, 1)
+    rec_loss_mat .= x .* log.(exp.(a))
+    rec_loss .= sum(rec_loss_mat, 1)
+    
+    d .= tmp964 .* c .+ rec_loss
+    
+    tmp980 = length(d)
+    
+    dcost!drec_loss_mat .= tmp989 .* (tmp989 ./ tmp980)
+    
+    dcost!da .= (((tmp989 .* (tmp989 ./ tmp980)) .* x) .* (tmp989 ./ exp.(a))) .* exp.(a)
+    dcost!da .= (((1      .* (1      ./ 100   )) .* x) .* (1      ./ exp.(a))) .* exp.(a)
+    
+    A_mul_Bt!(dcost!dWd, dcost!da, z)
+    
+    At_mul_B!(dcost!dz__2, Wd, dcost!da)
+    
+    dcost!dz__1 .= -0.5 .* sum(dcost!drec_loss_mat, 1)
+    
+    dcost!dz .= dcost!dz__1 .+ dcost!dz__2
+    A_mul_Bt!(dcost!dWe, dcost!dz, x)
+    At_mul_B!(dcost!dx__2, We, dcost!dz)
+    dcost!dx .= (tmp989 .* (tmp989 ./ tmp980)) .* log.(exp.(a)) .+ dcost!dx__2
+    cost = sum(d ./ 100)
+    tmp1006 = (cost, dcost!dWe, dcost!dWd, dcost!dx)
+
+end

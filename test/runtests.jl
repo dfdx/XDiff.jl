@@ -21,6 +21,11 @@ function test_compare(f; inputs...)
 end
 
 
+logistic(x) = 1 ./ (1 + exp.(-x))
+@scalardiff logistic(x::Number) 1 (logistic(x) .* (1 .- logistic(x)))
+
+
+include("vae.jl")
 include("aggr.jl")
 include("linreg.jl")
 include("ann.jl")

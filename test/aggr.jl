@@ -23,4 +23,5 @@ function test_sum_2(x)
     z = sum(y2)
 end
 
+test_compare(test_sum_1; x=rand(3,4))
 test_compare(test_sum_2; x=rand(3,4))
