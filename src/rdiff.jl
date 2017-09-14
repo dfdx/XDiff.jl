@@ -336,21 +336,29 @@ end
 """
 fdiff(f::Function; ctx=Dict(), xs...)
 
-Differentiate function `f` w.r.t. its arguments and return tuple of derivative
-function, one per argument.
+Differentiate function `f` w.r.t. its arguments and return a function that
+procudes a tuples like this:
+
+    (result, d_arg1, d_arg2, ...)
 
 See also `xdiff(ex::Expr; ctx=Dict(), xs...)`.
 """
 function xdiff(f::Function; ctx=Dict(), inputs...)
     types = ([typeof(val) for (name, val) in inputs]...)
-    args, ex = funexpr(f, types)
+    args, ex = func_expr(f, types)
     ex = sanitize(ex)
     dex = xdiff(ex; ctx=ctx, inputs...)
-    mod = get(ctx, :mod, current_module())  # check why it's not filled in RNN benchmark
-    typed_args = [Expr(:(::), x, t) for (x, t) in zip(args, types)]
-    mem_ex = :($(Expr(:parameters, Expr(:kw, :mem, :(Dict())))))
-    header = Expr(:tuple, mem_ex, typed_args...)
-    fn_ex = Expr(:->, header, dex)
+    ctx[:dex] = dex
+    mod = get(ctx, :mod, current_module())
+    name = Espresso.genname("$(func_name(f))_deriv_")
+    # plain function
+    fn_ex = make_func_expr(name, args, [], dex)
     fn = eval(mod, fn_ex)
+    # function with additional argument `mem`
+    fn_ex_mem = make_func_expr(name, [args; :mem], [], dex)
+    eval(mod, fn_ex_mem)
+    # function with kw argument `mem=Dict()`
+    fn_ex_mem_kw = make_func_expr(name, args, [:mem => Dict()], dex)
+    eval(mod, fn_ex_mem_kw)
     return fn
 end
