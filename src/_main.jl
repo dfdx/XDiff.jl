@@ -21,18 +21,33 @@ end
 #########################################################
 
 
-function main_1923()
-    ex = quote
-        a = W * x
-        b = sum(a, 1)
-        c = 2b
-        z = sum(c)
-    end
-    x = rand(2,3); W = rand(5, 2)
-    inputs = [:W => W, :x => x]
 
-    g = proper_graph(ex; inputs...)
-    dg = _xdiff(g)
+function main_0193()
+    ex = quote 
+        xx2 = w1 * x1               # 200 x 10
+        x2 = log.(1.0 + exp.(xx2))  # 200 x 10
+        xx3 = w2 * x2               # 100 x 10
+        x3 = log.(1.0 + exp.(xx3))  # 100 x 10
+        x4 = w3 * x3                # 100 x 10
+        sum(1.0 ./ (1.0 + exp.(-x4)))  # 1
+    end
+    w1=rand(200, 1000); w2=rand(100, 200); w3=rand(100, 100); x1=rand(1000, 10);
+    inputs = [:w1=>w1, :w2=>w2, :w3=>w3, :x1=>x1];
+    ctx = Dict()
+
+    dex = xdiff(ex; ctx=ctx, inputs...)
+end
+
+
+# using GPUArrays
+
+
+
+function main_1923()
+    x = GPUArray(rand(784, 100))
+    y = GPUArray(rand(784, 100))
+    z = GPUArray(zeros(784, 100))
+    z .= log.(y)
 end
 
 
@@ -50,73 +65,15 @@ function xavier_init(dim_in, dim_out; c=1)
     return rand(Uniform(low, high), dim_in, dim_out)
 end
 
-function main_2w51()
-    We1 = xavier_init(500, 784); be1 = randn(500);
-    We2 = xavier_init(500, 500); be2 = randn(500);
-    We3 = xavier_init(20, 500); be3 = randn(20);
-    We4 = xavier_init(20, 500); be4 = randn(20);
-    Wd1 = xavier_init(500, 20); bd1 = randn(500);
-    Wd2 = xavier_init(500, 500); bd2 = randn(500);
-    Wd3 = xavier_init(784, 500); bd3 = randn(784);
-    x = rand(784, 100); eps = rand(Normal(0, 1),  20)
-    inputs = [:We1 => We1, :be1 => be1, :We2 => We2, :be2 => be2,
-              :We3 => We3, :be3 => be3, :We4 => We4, :be4 => be4,
-              :Wd1 => Wd1, :bd1 => bd1, :Wd2 => Wd2, :bd2 => bd2,
-              :Wd3 => Wd3, :bd3 => bd3, :eps => eps, :x => x]
-    vals = [inp[2] for inp in inputs]
 
-
-    ex = quote
-        dummy = 42.0
-        # encoder
-        he1 = tanh.(We1 * x .+ be1)
-        he2 = tanh.(We2 * he1 .+ be2)
-        mu = We3 * he2 .+ be3
-        log_sigma2 = We4 * he2 .+ be4
-        z = mu .+ sqrt.(exp.(log_sigma2)) .* eps
-        # decoder
-        hd1 = tanh.(Wd1 * z .+ bd1)
-        hd2 = tanh.(Wd2 * hd1 .+ bd2)
-        x_rec = logistic.(Wd3 * hd2 .+ bd3)
-        # loss
-        rec_loss = sum(x .* log.(1e-10 + x_rec) + (1 - x) .* log.(1e-10 + 1 - x_rec), 1)
-        latent_loss = -0.5 * sum(1 + log_sigma2 .- mu .^ 2 - exp.(log_sigma2), 1)
-        cost = mean(rec_loss .+ latent_loss)
-    end
-    
-    dex = xdiff(ex; inputs...)
-    mem = Dict()
-    eval(dex)
-end
-
-
-using ReverseDiff: GradientTape, GradientConfig, gradient, gradient!, compile
-
-
-function rd_diff(f; inputs...)
-    vals = ([val for (name, val) in inputs]...)
-    f_tape = GradientTape(f, vals)
-    compiled_f_tape = compile(f_tape)
-    cfg = GradientConfig(vals)
-    results = map(similar, vals)
-    gradient!(results, compiled_f_tape, vals)
-    results
-end
-
-
-f(We, Wd, x) = begin
+function ae(We, Wd, x)
     z = We * x
-    a = Wd * z
-    x_rec = exp.(a)
-    b = log.(x_rec)
-    rec_loss_mat = x .* b
+    x_rec = exp.(Wd * z)
+    rec_loss_mat = x .* log.(x_rec)
     rec_loss = sum(rec_loss_mat, 1)
-    c = sum(z, 1)
-    latent_loss = -0.5 * c
-    d = latent_loss .+ rec_loss
-    cost = mean(d)
+    latent_loss = sum(z, 1)
+    cost = mean(latent_loss .+ rec_loss)
 end
-
 
 
 function main_3445()
@@ -130,7 +87,6 @@ function main_3445()
         cost = mean(latent_loss .+ rec_loss)
     end
     # doesn't work
-    ex = quote        
         z = We * x
         a = Wd * z
         x_rec = exp.(a)
@@ -144,24 +100,24 @@ function main_3445()
     end
 
 
-    We = xavier_init(20, 784);
+    We = xavier_init(20, 784)
     Wd = xavier_init(784, 20);
-    x = rand(784, 100)
+    x = rand(784, 100)    
+    We = GPUArray(We); Wd = GPUArray(Wd); x = GPUArray(x)
+    mem = Dict()
+    
+    
     inputs = [:We => We, :Wd => Wd, :x => x]
 
+    ctx = Dict(:codegen => CuCodeGen(:mem))
+    dex = xdiff(ex; ctx=ctx, inputs...)
+    
+
+    
     rd_vals = rd_diff(f; inputs...)
 
-    g = proper_graph(ex; inputs...)
-    dg = _xdiff(g)
-    rg = cat(g, dg)
-    outvars = unshift!([deriv_name(g.ctx[:z_var], var) for (var, _) in inputs], varname(g[end]))
-    push!(rg, :tuple, Espresso.genname(), Expr(:tuple, outvars...))
-    rg = topsort(rg)
-    infer_deriv_size!(rg)  # need to know size to evaluate things like `dz!dx[i] = 1.0`
-    evaluate!(rg)
+    
 
-
-    dex = generate_code(BufCodeGen(:mem), rg)
     # tmp1310 = 1
     # tmp1298 = 1
     # tmp1282 = -0.5
@@ -170,35 +126,3 @@ end
 
 
 
-quote
-    tmp989 = 1
-    tmp964 = -0.5
-    A_mul_B!(z, We, x)
-    A_mul_B!(a, Wd, z)
-    c .= sum(z, 1)
-    rec_loss_mat .= x .* log.(exp.(a))
-    rec_loss .= sum(rec_loss_mat, 1)
-    
-    d .= tmp964 .* c .+ rec_loss
-    
-    tmp980 = length(d)
-    
-    dcost!drec_loss_mat .= tmp989 .* (tmp989 ./ tmp980)
-    
-    dcost!da .= (((tmp989 .* (tmp989 ./ tmp980)) .* x) .* (tmp989 ./ exp.(a))) .* exp.(a)
-    dcost!da .= (((1      .* (1      ./ 100   )) .* x) .* (1      ./ exp.(a))) .* exp.(a)
-    
-    A_mul_Bt!(dcost!dWd, dcost!da, z)
-    
-    At_mul_B!(dcost!dz__2, Wd, dcost!da)
-    
-    dcost!dz__1 .= -0.5 .* sum(dcost!drec_loss_mat, 1)
-    
-    dcost!dz .= dcost!dz__1 .+ dcost!dz__2
-    A_mul_Bt!(dcost!dWe, dcost!dz, x)
-    At_mul_B!(dcost!dx__2, We, dcost!dz)
-    dcost!dx .= (tmp989 .* (tmp989 ./ tmp980)) .* log.(exp.(a)) .+ dcost!dx__2
-    cost = sum(d ./ 100)
-    tmp1006 = (cost, dcost!dWe, dcost!dWd, dcost!dx)
-
-end

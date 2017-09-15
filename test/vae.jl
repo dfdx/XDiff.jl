@@ -42,39 +42,3 @@ let
 
     test_compare(vae_cost; inputs...)
 end
-
-
-# function xavier_init(dim_in, dim_out; c=1)
-#     low = -c * sqrt(6.0 / (dim_in + dim_out))
-#     high = c * sqrt(6.0 / (dim_in + dim_out))
-#     return rand(Uniform(low, high), dim_in, dim_out)
-# end
-
-
-# function vae_cost(We, Wd, x)
-#     z = We * x
-#     x_rec = exp.(Wd * z)
-#     rec_loss_mat = x .* log.(x_rec)
-#     rec_loss = sum(rec_loss_mat, 1)
-#     latent_loss = -0.5 * sum(z, 1)
-#     cost = mean(latent_loss .+ rec_loss)
-# end
-
-
-
-# let
-#     We = xavier_init(20, 784);
-#     Wd = xavier_init(784, 20);
-#     x = rand(784, 100); eps = rand(Normal(0, 1),  20)
-#     inputs = [:We => We,
-#               :Wd => Wd,
-#               :x => x]
-
-#     # rd_vals = rd_diff(vae_cost; inputs...)
-
-
-    
-    
-#     test_compare(vae_cost; inputs...)
-
-# end
