@@ -344,6 +344,7 @@ procudes a tuples like this:
 See also `xdiff(ex::Expr; ctx=Dict(), xs...)`.
 """
 function xdiff(f::Function; ctx=Dict(), inputs...)
+    ctx = to_context(ctx)
     types = ([typeof(val) for (name, val) in inputs]...)
     args, ex = func_expr(f, types)
     ex = sanitize(ex)
