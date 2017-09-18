@@ -20,6 +20,47 @@ end
 
 #########################################################
 
+using GPUArrays
+
+
+logistic(x) = 1 ./ (1 + exp.(-x))
+@scalardiff logistic(x::Number) 1 (logistic(x) .* (1 .- logistic(x)))
+
+
+function gpu_test()
+    ex = quote
+        firstLayer = logistic(We1 * x .+ b1)
+        encodedInput = logistic(We2 * firstLayer .+ b2)
+        reconstructedInput = logistic(Wd * encodedInput)
+        cost = sum((reconstructedInput .- x) .^ 2.0)
+    end
+
+    FT = Float64
+    We1 = rand(FT, 200, 1000); b1 = rand(FT, 200);
+    We2 = rand(FT, 100, 200); b2 = rand(FT, 100);
+    Wd = rand(FT, 1000, 100); x = rand(FT, 1000, 100);
+    inputs = [:We1 => We1, :We2 => We2, :Wd => Wd, :b1 => b1, :b2 => b2, :x => x];
+
+    ctx = Dict()
+    dex = xdiff(ex; ctx=ctx, inputs...)
+    eval(dex)
+
+    ctx = Dict(:codegen => CuCodeGen(:mem))
+    dex = xdiff(ex; ctx=ctx, inputs...)
+
+    mem = Dict()
+    We1 = GPUArray(We1);  b1 = GPUArray(b1)
+    We2 = GPUArray(We2); b2 = GPUArray(b2)
+    Wd = GPUArray(Wd); x = GPUArray(x)
+    eval(dex)
+end
+
+
+
+# -------------------------------------------------
+
+
+
 
 
 function main_0193()
@@ -63,65 +104,6 @@ function xavier_init(dim_in, dim_out; c=1)
     low = -c * sqrt(6.0 / (dim_in + dim_out))
     high = c * sqrt(6.0 / (dim_in + dim_out))
     return rand(Uniform(low, high), dim_in, dim_out)
-end
-
-
-function ae(We, Wd, x)
-    z = We * x
-    x_rec = exp.(Wd * z)
-    rec_loss_mat = x .* log.(x_rec)
-    rec_loss = sum(rec_loss_mat, 1)
-    latent_loss = sum(z, 1)
-    cost = mean(latent_loss .+ rec_loss)
-end
-
-
-function main_3445()
-    # works
-    ex = quote
-        z = We * x
-        x_rec = exp.(Wd * z)
-        rec_loss_mat = x .* log.(x_rec)
-        rec_loss = sum(rec_loss_mat, 1)
-        latent_loss = sum(z, 1)
-        cost = mean(latent_loss .+ rec_loss)
-    end
-    # doesn't work
-        z = We * x
-        a = Wd * z
-        x_rec = exp.(a)
-        b = log.(x_rec)
-        rec_loss_mat = x .* b
-        rec_loss = sum(rec_loss_mat, 1)
-        c = sum(z, 1)
-        latent_loss = -0.5 * c
-        d = latent_loss .+ rec_loss
-        cost = mean(d)
-    end
-
-
-    We = xavier_init(20, 784)
-    Wd = xavier_init(784, 20);
-    x = rand(784, 100)    
-    We = GPUArray(We); Wd = GPUArray(Wd); x = GPUArray(x)
-    mem = Dict()
-    
-    
-    inputs = [:We => We, :Wd => Wd, :x => x]
-
-    ctx = Dict(:codegen => CuCodeGen(:mem))
-    dex = xdiff(ex; ctx=ctx, inputs...)
-    
-
-    
-    rd_vals = rd_diff(f; inputs...)
-
-    
-
-    # tmp1310 = 1
-    # tmp1298 = 1
-    # tmp1282 = -0.5
-    # dcost!dlatent_loss[i,j] = 1.0
 end
 
 

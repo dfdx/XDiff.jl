@@ -12,6 +12,7 @@ export
     VectorCodeGen,
     EinCodeGen,
     BlasCodeGen,
+    CuCodeGen,
     # reexport from Espresso
     @get_or_create,
     sum_1,
