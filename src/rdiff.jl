@@ -347,19 +347,35 @@ function xdiff(f::Function; ctx=Dict(), inputs...)
     ctx = to_context(ctx)
     types = ([typeof(val) for (name, val) in inputs]...)
     args, ex = func_expr(f, types)
+    flat_args, ex, st = destruct(args, types, ex)
     ex = sanitize(ex)
-    dex = xdiff(ex; ctx=ctx, inputs...)
+    flat_inputs = destruct_inputs(inputs)    
+    dex = xdiff(ex; ctx=ctx, flat_inputs...)
     ctx[:dex] = dex
     mod = get(ctx, :mod, current_module())
     name = Espresso.genname("$(func_name(f))_deriv_")
-    # plain function
-    fn_ex = make_func_expr(name, args, [], dex)
-    fn = eval(mod, fn_ex)
+    flat_types = [top_type(val) for (name, val) in flat_inputs]
+    typed_flat_args = [:($a::$t) for (a, t) in zip(flat_args, flat_types)]    
     # function with additional argument `mem`
-    fn_ex_mem = make_func_expr(name, [args; :mem], [], dex)
-    eval(mod, fn_ex_mem)
+    fn_ex_mem = make_func_expr(name, [typed_flat_args; :mem], [], dex)
+    fn = eval(mod, fn_ex_mem)
     # function with kw argument `mem=Dict()`
-    fn_ex_mem_kw = make_func_expr(name, args, [:mem => Dict()], dex)
+    fn_ex_mem_kw = make_func_expr(name, typed_flat_args, [:mem => Dict()], dex)
     eval(mod, fn_ex_mem_kw)
+    if any(isstruct, types)
+        # preparations for model adapter
+        struct_types = [isstruct(t) ? t : top_type(t) for t in types]
+        typed_args = [:($a::$t) for (a, t) in zip(args, struct_types)]
+        rev_st = Dict(v => k for (k, v) in st)
+        model_args = [haskey(rev_st, a) ? rev_st[a] : a for a in flat_args]
+        # model adapter: with additional `mem`
+        model_fn_ex_mem = :($name($(typed_args...), mem) =
+                            $name($(model_args...), mem)) |> sanitize
+        eval(mod, model_fn_ex_mem)
+        # model adapter: with kw argument `mem=Dict()`
+        model_fn_ex_kw = :($name($(typed_args...); mem=Dict()) =
+                           $name($(model_args...); mem=Dict())) |> sanitize
+        eval(mod, model_fn_ex_kw)
+    end
     return fn
 end
