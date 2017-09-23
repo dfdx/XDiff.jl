@@ -34,5 +34,5 @@ function main_1642()
     ctx = Dict(:codegen => EinCodeGen())
     ex = :(W * x .+ b)
     
-    xdiff(ex; ctx=ctx, inputs...)
+    dex = xdiff(ex; ctx=ctx, inputs...)
 end
