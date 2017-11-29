@@ -2,6 +2,8 @@
 
 [![Build Status](https://travis-ci.org/dfdx/XDiff.jl.svg?branch=master)](https://travis-ci.org/dfdx/XDiff.jl)
 
+> This package is unique in that it can differentiate vector-valued expressions in Einstein notation. However, if you only need gradients of scalar-valued functions (which is typicial in machine learning), please use [XGrad.jl](https://github.com/dfdx/XGrad.jl) instead. XGrad.jl is re-thought and stabilized version of this package, adding many useful featues in place of (not frequently used) derivatives of vector-valued functions. If nevertheless you want to continue using XDiff.jl, please pin Espresso.jl to version `v3.0.0`, which is the last supporting Einstein notation. 
+
 **XDiff.jl** is an expression differentiation package, supporting fully
 symbolic approach to finding tensor derivatives.
 Unlike automatic differentiation packages, XDiff.jl can output not only ready-to-use
